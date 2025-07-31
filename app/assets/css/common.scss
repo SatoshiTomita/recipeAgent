@@ -1,0 +1,14 @@
+/* ----------------
+Common CSS
+------------------ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 数字を見やすい Roboto 300/400/500 で表示するために読み込む */
+@import url("https://fonts.googleapis.com/css2?family=Hina+Mincho&family=Roboto:wght@300;400;500&display=swap");
+body {
+  height: 100dvh;
+  font-family: "Roboto", "Hiragino Kaku Gothic Pro", "Hiragino Sans", Meiryo,
+    sans-serif;
+}
