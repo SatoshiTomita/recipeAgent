@@ -8,7 +8,7 @@ import serviceAccount from "../config/serviceAccontKey.json";
 // firebase-adminを初期化
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-  databaseURL: "https://the-line-crm.firebaseio.com",
+  // databaseURL: "https://recipeagent-cff98.firebaseio.com",
 });
 
 setGlobalOptions({ region: "asia-northeast1" });
