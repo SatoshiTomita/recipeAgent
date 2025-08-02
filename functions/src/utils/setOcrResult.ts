@@ -1,7 +1,9 @@
 import admin from "firebase-admin";
 import type { ParsedReceipt } from "../types/ocr";
 const firestore = admin.firestore();
-
+function removeUndefined(obj: any): any {
+    return JSON.parse(JSON.stringify(obj));
+}
 export const setOcrResult = async (
     uid: string,
     result: {
@@ -15,10 +17,11 @@ export const setOcrResult = async (
             .doc(uid)
             .collection("recipes")
             .doc();
-
+        
+        const cleanedParsedResult = removeUndefined(result.parsed);
         await docRef.set({
             ocrText: result.text,
-            parsedResult: result.parsed,
+            parsedResult: cleanedParsedResult,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 

@@ -23,6 +23,7 @@ interface FunctionsObj {
 const funcs: FunctionsObj = {
   api_visionAPI_getOcrResult: "./visionAPI/getOcrResult",
   api_cloudflare_uploadImageToCloudflare: "./cloudFlare/useStorage",
+  api_documentAI_getReceiptData: "./documentAI/getRecieptData",
 };
 
 const loadFunctions = (functionsObj: FunctionsObj) => {
