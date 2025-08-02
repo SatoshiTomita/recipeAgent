@@ -1,12 +1,48 @@
-<!-- pages/test.vue -->
+<script setup lang="ts">
+import { ref } from "vue";
+const file = ref<File | null>(null);
+const result = ref<{ text: string } | null>(null);
+const error = ref("");
+const { call } = useGetImageInfo(); // Cloud Functions 呼び出し
+const { uploadImage } = useStorage();
+
+const onFileChange = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  file.value = target.files?.[0] || null;
+};
+
+const analyze = async () => {
+  error.value = "";
+  result.value = null;
+
+  if (!file.value) {
+    error.value = "画像ファイルを選択してください";
+    return;
+  }
+
+  try {
+    console.log("アップロードするファイル:", file.value);
+    console.log("アップロード開始");
+    const imageUrl = await uploadImage(file.value);
+    console.log("アップロードされた画像のURL:", imageUrl);
+    const data = await call(imageUrl);
+    result.value = data;
+  } catch (err: any) {
+    error.value = err.message || "解析に失敗しました";
+  }
+};
+</script>
+
 <template>
-  <div class="min-h-screen bg-gray-100 flex flex-col items-center justify-center">
-    <h1 class="text-4xl font-bold text-blue-600 mb-4">Tailwind 動作テスト</h1>
-    <p class="text-lg text-gray-700">
-      これは Tailwind CSS が正しく適用されていればスタイルが効いているはずです。
-    </p>
-    <button class="mt-6 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded shadow">
-      ボタン確認
-    </button>
+  <div class="p-4">
+    <input type="file" accept="image/*" @change="onFileChange" class="mb-2" />
+    <button @click="analyze" class="bg-blue-500 text-white px-4 py-2 rounded">OCR 実行</button>
+
+    <div v-if="result" class="mt-4">
+      <h2>結果:</h2>
+      <pre>{{ result.text }}</pre>
+    </div>
+
+    <div v-if="error" class="text-red-600 mt-4">{{ error }}</div>
   </div>
 </template>

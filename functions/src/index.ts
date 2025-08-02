@@ -22,6 +22,7 @@ interface FunctionsObj {
 // ここに定義を追加していく
 const funcs: FunctionsObj = {
   api_vision_getImageInfo: "./visionAPI/getImageInfo",
+  api_cloudflare_uploadImageToCloudflare: "./cloudFlare/useStorage",
 };
 
 const loadFunctions = (functionsObj: FunctionsObj) => {
