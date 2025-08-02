@@ -24,6 +24,7 @@ const funcs: FunctionsObj = {
   api_visionAPI_getOcrResult: "./visionAPI/getOcrResult",
   api_cloudflare_uploadImageToCloudflare: "./cloudFlare/useStorage",
   api_documentAI_getReceiptData: "./documentAI/getRecieptData",
+  api_openai_generateRecipe: "./openai/generateRecipe",
 };
 
 const loadFunctions = (functionsObj: FunctionsObj) => {
