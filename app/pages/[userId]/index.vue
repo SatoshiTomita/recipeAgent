@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onAuthStateChanged, getAuth } from "firebase/auth";
 import { ref, onMounted } from "vue";
+import type { Ingredient } from "~/@types/ingredients";
 const router = useRouter();
 const userId = useRoute().params.userId as string;
 const { generateRecipe } = useGenerateRecipe();
-const { getRecipeItems } = useUserRecipes();
+const { getRecipeItems, addIngredient, updateIngredients } = useUserRecipes();
+
 
 const goToOcr = () => {
   if (userId) {
@@ -37,10 +39,32 @@ const items = ref([
   { name: "小松菜", price: 110, quantity: 1 },
   { name: "しめじ", price: 100, quantity: 1 },
 ]);
+const newIngredient = ref<Ingredient>({ name: "", quantity: 1 });
+
+const handleAddIngredient = async () => {
+  if (!newIngredient.value.name || newIngredient.value.quantity < 1) {
+    alert("食材名と数量を正しく入力してください");
+    return;
+  }
+
+  try {
+    await addIngredient(userId, {
+      name: newIngredient.value.name,
+      quantity: newIngredient.value.quantity,
+    });
+
+    // 表示にも反映
+    fetchedItems.value.push({ ...newIngredient.value });
+
+    // フォーム初期化
+    newIngredient.value = { name: "", quantity: 1 };
+  } catch (e) {
+    console.error("食材の追加に失敗しました:", e);
+  }
+};
 
 
-const fetchedItems = ref<{ name: string; quantity?: number }[]>([]);
-
+const fetchedItems = ref<Ingredient[]>([]);
 // 選択された料理スタイル（国）
 const cuisine = ref("日本");
 const recipe = ref("");
@@ -60,11 +84,24 @@ const handleGenerateRecipe = async () => {
 
 
 const auth = getAuth();
+const updateQuantity = async (index: number, quantity: number) => {
+  if (quantity < 1) return;
+  const item = fetchedItems.value[index];
+  if (!item) return;
+
+  item.quantity = quantity;
+  await updateIngredients(userId, fetchedItems.value as Ingredient[]);
+};
+
+
+const deleteIngredient = async (index: number) => {
+  fetchedItems.value.splice(index, 1);
+  await updateIngredients(userId, fetchedItems.value as Ingredient[]);
+};
 
 onMounted(() => {
   onAuthStateChanged(auth, async (user) => {
     if (user) {
-      const userId = user.uid; 
       // const result = await getRecipeItems(userId);
       // fetchedItems.value = result;
     } else {
@@ -83,16 +120,12 @@ onMounted(() => {
 
       <!-- ボタン群 -->
       <div class="flex flex-col sm:flex-row justify-center gap-4">
-        <button
-          @click="goToOcr"
-          class="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-transform transform hover:scale-105"
-        >
+        <button @click="goToOcr"
+          class="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-transform transform hover:scale-105">
           <span>📷 OCRページへ</span>
         </button>
-        <button
-          @click="goToCountrySelector"
-          class="flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-transform transform hover:scale-105"
-        >
+        <button @click="goToCountrySelector"
+          class="flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-transform transform hover:scale-105">
           <span>🌍 国を選択する</span>
         </button>
       </div>
@@ -101,25 +134,42 @@ onMounted(() => {
       <div>
         <h2 class="text-2xl font-semibold text-gray-700 mb-4">🛒 食材一覧</h2>
         <ul v-if="fetchedItems.length" class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-gray-800">
-          <li
-            v-for="(item, index) in fetchedItems"
-            :key="index"
-            class="bg-white border rounded-lg shadow-sm px-4 py-2 text-center"
-          >
-            {{ item.name }}<br />
-            <span class="text-sm text-gray-500">×{{ item.quantity ?? 1 }}</span>
+          <li v-for="(item, index) in fetchedItems" :key="index"
+            class="bg-white border rounded-lg shadow-sm px-4 py-2 text-center space-y-2">
+            <div class="font-semibold">{{ item.name }}</div>
+            <div class="flex items-center justify-center gap-2">
+              <input type="number" class="w-16 border rounded px-2 py-1 text-center" v-model.number="item.quantity"
+                @change="updateQuantity(index, item.quantity ?? 1)" min="1" />
+              <button @click="deleteIngredient(index)" class="text-red-500 hover:text-red-700 text-sm">
+                🗑 削除
+              </button>
+            </div>
           </li>
+
         </ul>
         <p v-else class="text-gray-500">食材がまだ登録されていません。</p>
       </div>
+      <!-- 食材追加フォーム -->
+      <div class="bg-white rounded-xl shadow p-6">
+        <h2 class="text-xl font-bold text-gray-700 mb-4">➕ 食材を追加</h2>
+        <div class="flex flex-col sm:flex-row gap-4">
+          <input v-model="newIngredient.name" type="text" placeholder="食材名（例: にんじん）"
+            class="flex-1 border border-gray-300 rounded-lg px-4 py-2" />
+          <input v-model.number="newIngredient.quantity" type="number" min="1" placeholder="数量"
+            class="w-32 border border-gray-300 rounded-lg px-4 py-2" />
+          <button @click="handleAddIngredient"
+            class="bg-blue-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-600">
+            追加
+          </button>
+        </div>
+      </div>
+
 
       <!-- レシピ生成ボタン -->
       <div class="text-center">
-        <button
-          @click="handleGenerateRecipe"
+        <button @click="handleGenerateRecipe"
           class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-10 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105"
-          :disabled="isLoading"
-        >
+          :disabled="isLoading">
           {{ isLoading ? '生成中...' : '🍽 レシピを生成する' }}
         </button>
       </div>
@@ -131,4 +181,3 @@ onMounted(() => {
     </div>
   </div>
 </template>
-

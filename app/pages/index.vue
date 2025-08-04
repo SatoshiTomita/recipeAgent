@@ -2,16 +2,9 @@
 import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { useRouter } from 'vue-router';
-
 const auth = getAuth();
 const db = getFirestore();
 const router = useRouter();
-
-const createRandomId = (length = 8): string => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-};
-
 const login = async () => {
   const provider = new GoogleAuthProvider();
   const result = await signInWithPopup(auth, provider);
@@ -20,20 +13,13 @@ const login = async () => {
   const userRef = doc(db, 'users', user.uid);
   const snapshot = await getDoc(userRef);
 
-  let randomUserId: string;
-
-  if (snapshot.exists()) {
-    // 既存のランダムID取得
-    randomUserId = snapshot.data().randomUserId;
-  } else {
-    // 新規ユーザー → ランダムID生成して保存
-    randomUserId = createRandomId();
-    await setDoc(userRef, { randomUserId });
+  if (!snapshot.exists()) {
+    await setDoc(userRef, {}); // 新規ユーザーならドキュメント作成
   }
 
-  // ✅ ページ遷移
-  router.push(`/${randomUserId}`);
+  router.push(`/${user.uid}`);
 };
+
 </script>
 
 <template>
