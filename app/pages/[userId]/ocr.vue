@@ -2,7 +2,12 @@
 import { ref } from "vue";
 import { getAuth } from "firebase/auth";
 const file = ref<File | null>(null);
-const result = ref<{ text: string } | null>(null);
+const result = ref<{
+  parsed?: {
+    items: { name: string; quantity?: number }[];
+  };
+} | null>(null);
+
 const error = ref("");
 const { getOcrResult } = useGetImageInfo(); // Cloud Functions 呼び出し
 const { uploadImage } = useStorage();
@@ -17,7 +22,7 @@ const onFileChange = (e: Event) => {
     previewUrl.value = null;
   }
 };
-
+const showModal = ref(false);
 
 const analyze = async () => {
   error.value = "";
@@ -37,7 +42,11 @@ const analyze = async () => {
   try {
     console.log("アップロードするファイル:", file.value);
     const data = await getOcrResult(file.value); // ✅ 修正ここ
+    console.log("OCR結果:", data);
     result.value = data;
+    if (data?.parsed?.items?.length) {
+      showModal.value = true;
+    }
   } catch (err: any) {
     error.value = err.message || "解析に失敗しました";
   }
@@ -68,12 +77,7 @@ const analyze = async () => {
       class="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded transition">
       OCR 実行
     </button>
-
-    <div v-if="result" class="mt-6 bg-gray-100 p-4 rounded-lg">
-      <h2 class="text-lg font-semibold text-gray-700 mb-2">OCR結果</h2>
-      <pre class="whitespace-pre-wrap break-words text-sm text-gray-800">{{ result.text }}</pre>
-    </div>
-
+    <OcrResult v-if="showModal" :items="result?.parsed?.items ?? []" @close="showModal = false" />
     <div v-if="error" class="mt-4 text-red-600 font-semibold text-center">
       {{ error }}
     </div>

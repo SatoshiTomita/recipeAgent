@@ -6,5 +6,5 @@ export type Item = {
 
 export type Ingredient = {
   name: string;
-  quantity: number;
+  quantity?: number;
 };
