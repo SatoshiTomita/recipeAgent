@@ -1,44 +1,98 @@
 <script setup lang="ts">
-import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { getAuth, onAuthStateChanged, signInWithPopup, signInWithEmailAndPassword, GoogleAuthProvider } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+
 const auth = getAuth();
 const db = getFirestore();
 const router = useRouter();
-const login = async () => {
-  const provider = new GoogleAuthProvider();
-  const result = await signInWithPopup(auth, provider);
-  const user = result.user;
 
-  const userRef = doc(db, 'users', user.uid);
-  const snapshot = await getDoc(userRef);
+const email = ref('');
+const password = ref('');
+const error = ref('');
 
-  if (!snapshot.exists()) {
-    await setDoc(userRef, {}); // 新規ユーザーならドキュメント作成
+// ページロード時に認証状態をチェック
+onMounted(() => {
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      // ユーザーがログイン済みの場合、ダッシュボードなどの保護されたルートへリダイレクト
+      router.push(`/${user.uid}`);
+    }
+  });
+});
+
+const loginWithGoogle = async () => {
+  try {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    await ensureUserDoc(result.user.uid);
+    router.push(`/${result.user.uid}`);
+  } catch (err: any) {
+    error.value = err.message || 'Googleログインに失敗しました';
   }
-
-  router.push(`/${user.uid}`);
 };
 
+const loginWithEmail = async () => {
+  try {
+    const result = await signInWithEmailAndPassword(
+      auth,
+      email.value,
+      password.value
+    );
+    await ensureUserDoc(result.user.uid);
+    router.push(`/${result.user.uid}`);
+  } catch (err: any) {
+    error.value = err.message || 'メールログインに失敗しました';
+  }
+};
+
+const ensureUserDoc = async (uid: string) => {
+  const userRef = doc(db, 'users', uid);
+  const snapshot = await getDoc(userRef);
+  if (!snapshot.exists()) {
+    await setDoc(userRef, {});
+  }
+};
 </script>
 
 <template>
   <div class="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
-    <div class="bg-white rounded-2xl shadow-xl p-10 text-center w-full max-w-sm animate-fade-in">
-      <h1 class="text-2xl font-bold mb-6 text-gray-800">ようこそ</h1>
-      <p class="text-gray-600 mb-8">Googleアカウントでログインしてください</p>
+    <div class="bg-white rounded-2xl shadow-xl p-10 text-center w-full max-w-sm animate-fade-in space-y-4">
+      <h1 class="text-2xl font-bold text-gray-800">ようこそ</h1>
+      <p class="text-gray-600">ログイン方法を選んでください</p>
+
+      <!-- Googleログイン -->
       <button
-        @click="login"
-        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition duration-200 ease-in-out transform hover:scale-105"
+        @click="loginWithGoogle"
+        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl w-full transition"
       >
-        <svg class="inline-block w-5 h-5 mr-2" viewBox="0 0 48 48">
-          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8a12 12 0 010-24c3.1 0 6 1.2 8.2 3.2l6.1-6.1A20 20 0 0024 4a20 20 0 100 40c11 0 20-9 20-20 0-1.3-.1-2.5-.4-3.5z"/>
-          <path fill="#FF3D00" d="M6.3 14.6l6.6 4.9A11.9 11.9 0 0124 12c3.1 0 6 1.2 8.2 3.2l6.1-6.1A19.9 19.9 0 0024 4c-7.3 0-13.7 4-17.3 10.1z"/>
-          <path fill="#4CAF50" d="M24 44c5.3 0 10.1-2 13.6-5.3l-6.3-5.2a12 12 0 01-17.6-4.7l-6.6 5.1C10.3 39.5 16.7 44 24 44z"/>
-          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 01-4.2 5.3l6.3 5.2c3.6-3.3 6.2-8.1 6.2-13.5 0-1.3-.1-2.5-.4-3.5z"/>
-        </svg>
         Googleでログイン
       </button>
+
+      <div class="border-t border-gray-300 my-4"></div>
+
+      <!-- メールログインフォーム -->
+      <input
+        type="email"
+        v-model="email"
+        placeholder="メールアドレス"
+        class="w-full border border-gray-300 p-2 rounded"
+      />
+      <input
+        type="password"
+        v-model="password"
+        placeholder="パスワード"
+        class="w-full border border-gray-300 p-2 rounded"
+      />
+      <button
+        @click="loginWithEmail"
+        class="bg-black hover:bg-gray-800 text-white font-semibold py-2 px-4 rounded-xl w-full transition"
+      >
+        メールでログイン
+      </button>
+
+      <p v-if="error" class="text-red-600 text-sm mt-2">{{ error }}</p>
     </div>
   </div>
 </template>

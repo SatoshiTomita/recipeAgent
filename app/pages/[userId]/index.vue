@@ -7,7 +7,9 @@ const userId = useRoute().params.userId as string;
 const { generateRecipe } = useGenerateRecipe();
 const { getRecipeItems, addIngredient, updateIngredients } = useUserRecipes();
 
-
+definePageMeta({
+  middleware: "auth-client",
+});
 const goToOcr = () => {
   if (userId) {
     router.push(`/${userId}/ocr`);
@@ -101,6 +103,7 @@ const deleteIngredient = async (index: number) => {
 
 onMounted(() => {
   onAuthStateChanged(auth, async (user) => {
+    console.log("Auth state changed:", user);
     if (user) {
       // const result = await getRecipeItems(userId);
       // fetchedItems.value = result;

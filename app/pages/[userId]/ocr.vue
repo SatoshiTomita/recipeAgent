@@ -1,6 +1,20 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { getAuth } from "firebase/auth";
+import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
+
+ const waitForAuthReady = (): Promise<User | null> => {
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(getAuth(), (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+};
+
+// pages/ocr.vue など
+definePageMeta({
+  middleware: "auth-client",
+});
 const file = ref<File | null>(null);
 const result = ref<{
   parsed?: {
@@ -27,13 +41,6 @@ const showModal = ref(false);
 const analyze = async () => {
   error.value = "";
   result.value = null;
-
-  const user = getAuth().currentUser;
-  if (!user) {
-    error.value = "ログインが必要です";
-    return;
-  }
-
   if (!file.value) {
     error.value = "画像ファイルを選択してください";
     return;
@@ -51,6 +58,14 @@ const analyze = async () => {
     error.value = err.message || "解析に失敗しました";
   }
 };
+onMounted(async () => {
+  const user = await waitForAuthReady();
+  if (user) {
+    console.log("✅ ログイン中のユーザー：", user.uid);
+  } else {
+    console.log("❌ 未ログイン");
+  }
+});
 
 </script>
 
