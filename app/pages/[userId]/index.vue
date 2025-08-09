@@ -105,8 +105,8 @@ onMounted(() => {
   onAuthStateChanged(auth, async (user) => {
     console.log("Auth state changed:", user);
     if (user) {
-      // const result = await getRecipeItems(userId);
-      // fetchedItems.value = result;
+      const result = await getRecipeItems(userId);
+      fetchedItems.value = result;
     } else {
       console.warn("ログインしていません");
     }

@@ -1,3 +1,4 @@
+import { getFirestore, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 export const useCountries = () => {
   const countries = [
     { label: "Afghanistan", flag: "🇦🇫", code: "AF" },
@@ -197,3 +198,9 @@ export const useCountries = () => {
 
   return { countries };
 };
+
+export async function updateUserNation(uid: string, nation: string) {
+  const db = getFirestore()
+  const ref = doc(db, 'users', uid)
+  await updateDoc(ref, { nation, updatedAt: serverTimestamp() })
+}

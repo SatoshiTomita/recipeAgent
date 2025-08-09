@@ -1,9 +1,11 @@
 import { httpsCallable } from "firebase/functions";
 export const useGetImageInfo = () => {
   const functions = useFunctions();
+
   const getImageInfo = httpsCallable(functions, "api_documentAI_getReceiptData-getReceiptData");
 
   const getOcrResult = async (file: File): Promise<any> => {
+      console.log("✅ useGetImageInfo composable initialized");
     const base64 = await toBase64(file); // ✅ ここで変換
     const result = await getImageInfo({ imageBase64: base64 }); // ✅ 正しいキー名で送信
     return result.data;

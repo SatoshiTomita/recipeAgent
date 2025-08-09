@@ -5,6 +5,8 @@ export type Item = {
 };
 
 export type Ingredient = {
-  name: string;
+  name?: string;
   quantity?: number;
 };
+
+export type StrictIngredient = { name: string; quantity: number };

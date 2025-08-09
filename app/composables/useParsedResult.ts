@@ -1,5 +1,5 @@
 // composables/useUserRecipes.ts
-import { getFirestore, doc, setDoc, arrayUnion, getDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc, arrayUnion, getDoc,updateDoc,increment,serverTimestamp } from "firebase/firestore";
 import type { Ingredient } from "@/@types/ingredients";
 
 export const useUserRecipes = () => {
@@ -48,3 +48,25 @@ export const useParsedResult = () => {
 
   return { getParsedItems };
 };
+
+export const incrementUserOcrTimes = async (uid: string, by = 1) => {
+  const db = getFirestore()
+  const ref = doc(db, 'users', uid)
+
+  try {
+    await updateDoc(ref, {
+      ocrTimes: increment(by),
+      updatedAt: serverTimestamp(),
+    })
+  } catch (e) {
+    await setDoc(
+      ref,
+      {
+        ocrTimes: by,
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      },
+      { merge: true }
+    )
+  }
+}

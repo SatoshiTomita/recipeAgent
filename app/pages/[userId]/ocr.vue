@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
-
- const waitForAuthReady = (): Promise<User | null> => {
+import { Timestamp } from "firebase/firestore";
+import type { StrictIngredient, Ingredient } from "~/@types/ingredients";
+definePageMeta({ middleware: "auth-client" });
+const userStore = useUserInfoStore();
+const waitForAuthReady = (): Promise<User | null> => {
   return new Promise((resolve) => {
     const unsubscribe = onAuthStateChanged(getAuth(), (user) => {
       unsubscribe();
@@ -11,30 +14,19 @@ import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
   });
 };
 
-// pages/ocr.vue など
-definePageMeta({
-  middleware: "auth-client",
-});
 const file = ref<File | null>(null);
-const result = ref<{
-  parsed?: {
-    items: { name: string; quantity?: number }[];
-  };
-} | null>(null);
-
+const result = ref<{ parsed?: { items: { name: string; quantity?: number }[] } } | null>(null);
+const route = useRoute(); // ✅ 追加
+const userId = route.params.userId as string; 
 const error = ref("");
-const { getOcrResult } = useGetImageInfo(); // Cloud Functions 呼び出し
+const { getOcrResult } = useGetImageInfo();
 const { uploadImage } = useStorage();
 const previewUrl = ref<string | null>(null);
 const onFileChange = (e: Event) => {
   const target = e.target as HTMLInputElement;
   const selected = target.files?.[0] || null;
   file.value = selected;
-  if (selected) {
-    previewUrl.value = URL.createObjectURL(selected);
-  } else {
-    previewUrl.value = null;
-  }
+  previewUrl.value = selected ? URL.createObjectURL(selected) : null;
 };
 const showModal = ref(false);
 
@@ -48,26 +40,84 @@ const analyze = async () => {
 
   try {
     console.log("アップロードするファイル:", file.value);
-    const data = await getOcrResult(file.value); // ✅ 修正ここ
+    const data = await getOcrResult(file.value);
     console.log("OCR結果:", data);
     result.value = data;
-    if (data?.parsed?.items?.length) {
+
+    const normalized: StrictIngredient[] =
+      (data?.parsed?.items as Ingredient[] ?? [])
+        .map((i: Ingredient) => ({
+          name: (i.name ?? '').trim(),
+          quantity: i.quantity ?? 1,
+        }))
+        .filter((i) => i.name.length > 0);
+
+
+    // ストアが未初期化なら最低限で初期化（ログイン後なら uid 等も反映）
+    if (!userStore.state.value) {
+      const authUser = getAuth().currentUser;
+      userStore.set({
+        uid: authUser?.uid ?? "anonymous",
+        displayName: authUser?.displayName ?? "",
+        email: authUser?.email ?? "",
+        avatarUrl: undefined,
+        ingredients: [],
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        lastLogin: Timestamp.now(),
+        ocrTimes: 0,
+        nation: "JP",
+        plan: "standard",
+        points: 0,
+        isActive: true,
+      });
+    }
+    if (userId) {
+      try {
+        await incrementUserOcrTimes(userId, 1);
+      } catch (e) {
+        console.warn("incrementUserOcrTimes failed:", e);
+      }
+    }
+    userStore.replaceAllIngredients(normalized); // 食材一覧を格納
+    userStore.incrementOcrTimes();               // カウント+1
+
+    if (normalized.length) {
       showModal.value = true;
     }
   } catch (err: any) {
     error.value = err.message || "解析に失敗しました";
   }
 };
+
 onMounted(async () => {
   const user = await waitForAuthReady();
   if (user) {
     console.log("✅ ログイン中のユーザー：", user.uid);
+    // 任意：初回だけストアを初期化したい場合はここでも可
+    if (!userStore.state.value) {
+      userStore.set({
+        uid: user.uid,
+        displayName: user.displayName ?? "",
+        email: user.email ?? "",
+        avatarUrl: undefined,
+        ingredients: [],
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        lastLogin: Timestamp.now(),
+        ocrTimes: 0,
+        nation: "JP",
+        plan: "standard",
+        points: 0,
+        isActive: true,
+      });
+    }
   } else {
     console.log("❌ 未ログイン");
   }
 });
-
 </script>
+
 
 <template>
   <div class="max-w-xl mx-auto p-6 bg-white shadow-lg rounded-xl mt-10">

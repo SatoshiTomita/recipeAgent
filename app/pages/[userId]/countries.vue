@@ -1,10 +1,26 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { useCountries } from "~/composables/useCountries";
+import { ref } from "vue"
+import { getAuth } from "firebase/auth"
 
-const { countries } = useCountries();
-const cuisine = ref("日本");
+const { countries } = useCountries()
+const userStore = useUserInfoStore()
+const cuisine = ref("日本")
+
+const changeNation = async (country: { label: string; code: string }) => {
+  const uid = getAuth().currentUser?.uid
+  if (!uid) {
+    // ここはアプリのトーストに置き換えてOK
+    console.error("未ログインです")
+    return
+  }
+
+  // Firestore 保存（コードを保存する想定: "JP" など）
+  await updateUserNation(uid, country.code)
+  userStore.setNationLocal(country.code)
+  cuisine.value = country.label
+}
 </script>
+
 
 <template>
   <div class="min-h-screen bg-gradient-to-br from-white to-gray-50 py-12 px-6">
@@ -17,15 +33,13 @@ const cuisine = ref("日本");
         <button
           v-for="country in countries"
           :key="country.label"
-          @click="cuisine = country.label"
+          @click="changeNation(country)"
           class="flex flex-col items-center justify-center px-4 py-3 rounded-xl border shadow-sm transition-all duration-200"
           :class="cuisine === country.label
             ? 'bg-green-500 text-white scale-105'
             : 'bg-white hover:bg-gray-100 text-gray-800'"
         >
-         <img :src="`https://flagcdn.com/w80/${country.code.toLowerCase()}.png`" />
-
-
+          <img :src="`https://flagcdn.com/w80/${country.code.toLowerCase()}.png`" alt="" />
           <span class="text-sm font-medium text-center">{{ country.label }}</span>
         </button>
       </div>
