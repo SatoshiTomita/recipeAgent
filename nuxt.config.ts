@@ -1,9 +1,13 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import { resolve } from 'node:path'
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   modules: ['@nuxt/eslint', '@nuxt/image', '@nuxt/ui',"@nuxtjs/tailwindcss"],
   css: ["@/assets/css/common.scss"],
+  alias: {
+    'tailwindcss/colors': resolve(__dirname, 'utils/tw-colors-runtime.ts'),
+  },
    runtimeConfig: {
     public: {
       ENV: process.env[process.env.NODE_ENV + "_" + "ENV"],
