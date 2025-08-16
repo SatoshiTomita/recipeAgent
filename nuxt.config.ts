@@ -10,14 +10,11 @@ export default defineNuxtConfig({
   },
    runtimeConfig: {
     public: {
-      ENV: process.env[process.env.NODE_ENV + "_" + "ENV"],
-      apiKey: process.env[process.env.NODE_ENV + "_" + "apiKey"],
-      authDomain: process.env[process.env.NODE_ENV + "_" + "authDomain"],
-      projectId: process.env[process.env.NODE_ENV + "_" + "projectId"],
-      storageBucket: process.env[process.env.NODE_ENV + "_" + "storageBucket"],
-      databaseURL: process.env[process.env.NODE_ENV + "_" + "databaseURL"],
-      SENTRY_KEY: process.env.SENTRY_KEY,
-      lineAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
+      apiKey: process.env.NUXT_PUBLIC_API_KEY,
+      authDomain: process.env.NUXT_PUBLIC_AUTH_DOMAIN,
+      projectId: process.env.NUXT_PUBLIC_PROJECT_ID,
+      storageBucket: process.env.NUXT_PUBLIC_STORAGE_BUCKET,
+      databaseURL: process.env.NUXT_PUBLIC_DATABASE_URL,
     },
   },
 })
