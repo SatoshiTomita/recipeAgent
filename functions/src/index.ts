@@ -25,6 +25,9 @@ const funcs: FunctionsObj = {
   api_cloudflare_uploadImageToCloudflare: "./cloudFlare/useStorage",
   api_documentAI_getReceiptData: "./documentAI/getRecieptData",
   api_openai_generateRecipe: "./openai/generateRecipe",
+  api_openai_recipes_core:"./openai/recipes/core",
+  api_openai_recipes_generaeteAgentRecipes:"./openai/recipes/generateAgentRecipe",
+  api_openai_recipes_runRecipeAgent:"./openai/recipes/runRecipeAgent"
 };
 
 const loadFunctions = (functionsObj: FunctionsObj) => {

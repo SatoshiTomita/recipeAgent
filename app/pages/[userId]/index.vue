@@ -6,7 +6,7 @@ const router = useRouter();
 const userId = useRoute().params.userId as string;
 const { generateRecipe } = useGenerateRecipe();
 const { getRecipeItems, addIngredient, updateIngredients } = useUserRecipes();
-
+const { generate, run } = useRecipeAgent()
 definePageMeta({
   middleware: "auth-client",
 });
@@ -70,6 +70,7 @@ const fetchedItems = ref<Ingredient[]>([]);
 // 選択された料理スタイル（国）
 const cuisine = ref("日本");
 const recipe = ref("");
+const recipeAgentText = ref("");
 const isLoading = ref(false);
 
 const handleGenerateRecipe = async () => {
@@ -99,6 +100,26 @@ const updateQuantity = async (index: number, quantity: number) => {
 const deleteIngredient = async (index: number) => {
   fetchedItems.value.splice(index, 1);
   await updateIngredients(userId, fetchedItems.value as Ingredient[]);
+};
+
+const handleGenerateRecipeAgent = async () => {
+  isLoading.value = true;
+  try {
+    const pantry = (fetchedItems.value || []).map(i => ({
+      name: i.name,
+      quantity: i.quantity ?? 1,
+    }));
+    const data = await generate({
+      pantry,
+      preferences: { cuisine: cuisine.value }, // 必要に応じて maxTimeMin なども追加
+    });
+    recipeAgentText.value = JSON.stringify(data, null, 2);
+  } catch (e: any) {
+    console.error("エージェント生成に失敗:", e);
+    recipeAgentText.value = e?.message || "エージェント生成に失敗しました。";
+  } finally {
+    isLoading.value = false;
+  }
 };
 
 onMounted(() => {
@@ -175,11 +196,20 @@ onMounted(() => {
           :disabled="isLoading">
           {{ isLoading ? '生成中...' : '🍽 レシピを生成する' }}
         </button>
+        <div class="h-3"></div>
+        <button @click="handleGenerateRecipeAgent"
+          class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-10 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105"
+          :disabled="isLoading">
+          {{ isLoading ? '生成中...' : '🤖 パントリーから生成（嗜好反映）' }}
+        </button>
       </div>
 
       <!-- レシピ表示 -->
       <div v-if="recipe" class="bg-white border p-6 rounded-xl shadow-md whitespace-pre-wrap text-gray-800">
         {{ recipe }}
+      </div>
+      <div v-if="recipeAgentText" class="bg-white border p-6 rounded-xl shadow-md mt-4">
+        <pre class="whitespace-pre-wrap text-gray-800 text-sm">{{ recipeAgentText }}</pre>
       </div>
     </div>
   </div>
