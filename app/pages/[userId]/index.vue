@@ -101,26 +101,22 @@ const deleteIngredient = async (index: number) => {
   fetchedItems.value.splice(index, 1);
   await updateIngredients(userId, fetchedItems.value as Ingredient[]);
 };
-
-const handleGenerateRecipeAgent = async () => {
-  isLoading.value = true;
+const runResult = ref<{recipeId:string; recipe:any} | null>(null)
+const handleRunRecipeAgent = async () => {
+  isLoading.value = true
   try {
-    const pantry = (fetchedItems.value || []).map(i => ({
-      name: i.name,
-      quantity: i.quantity ?? 1,
-    }));
-    const data = await generate({
-      pantry,
-      preferences: { cuisine: cuisine.value }, // 必要に応じて maxTimeMin なども追加
-    });
-    recipeAgentText.value = JSON.stringify(data, null, 2);
-  } catch (e: any) {
-    console.error("エージェント生成に失敗:", e);
-    recipeAgentText.value = e?.message || "エージェント生成に失敗しました。";
+    // ✅ ログイン必須（未ログインなら関数側で unauthenticated）
+    const res = await run()
+    runResult.value = res
+    // res.recipeId が Firestore に保存されたドキュメントID
+    // res.recipe が採用レシピJSON
+  } catch (e:any) {
+    console.error('runRecipeAgent 失敗:', e)
+    alert(e?.message || 'エージェントの実行に失敗しました')
   } finally {
-    isLoading.value = false;
+    isLoading.value = false
   }
-};
+}
 
 onMounted(() => {
   onAuthStateChanged(auth, async (user) => {
@@ -197,7 +193,7 @@ onMounted(() => {
           {{ isLoading ? '生成中...' : '🍽 レシピを生成する' }}
         </button>
         <div class="h-3"></div>
-        <button @click="handleGenerateRecipeAgent"
+        <button @click="handleRunRecipeAgent"
           class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-10 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105"
           :disabled="isLoading">
           {{ isLoading ? '生成中...' : '🤖 パントリーから生成（嗜好反映）' }}

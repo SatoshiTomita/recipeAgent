@@ -3,10 +3,11 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { generateAgentRecipeCore, OPENAI_API_KEY, Prefs } from './core'
 import type { PantryItem } from './core'
+
 export const runRecipeAgent = onCall({
   region: 'asia-northeast1',
   invoker: 'public',
-  secrets: [OPENAI_API_KEY],          // ★重要：コア内で secret を読むので必須
+  secrets: [OPENAI_API_KEY],
 }, async (req) => {
   const uid = req.auth?.uid
   if (!uid) throw new HttpsError('unauthenticated', 'login required')
@@ -15,9 +16,24 @@ export const runRecipeAgent = onCall({
   const userRef = db.doc(`users/${uid}`)
   const user = (await userRef.get()).data() || {}
   const prefs: Prefs = user.preferences || {}
+  
+  // ★ フィールド配列から取り出す
+  const arr = (user.ingredients ?? []) as any[]
+  const pantry: PantryItem[] = arr
+    .map((d: any) => ({
+      name: String(d.name ?? '').trim(),
+      quantity: Number(d.quantity ?? 0),
+      unit: d.unit ? String(d.unit) : undefined,
+    }))
+    .filter(it => it.name && Number.isFinite(it.quantity) && it.quantity > 0)
+  
+  if (pantry.length === 0) {
+    throw new HttpsError('invalid-argument', 'pantry is empty (no items in users/{uid}.ingredients field)')
+  }
 
-  const pantrySnap = await userRef.collection('pantry').get()
-  const pantry = pantrySnap.docs.map(d => d.data() as PantryItem)
+  if (pantry.length === 0) {
+    throw new HttpsError('invalid-argument', 'pantry is empty (no items in users/{uid}/ingredients)')
+  }
 
   const runRef = userRef.collection('agentRuns').doc()
   await runRef.set({ step:'plan', attempts:0, createdAt:Timestamp.now(), updatedAt:Timestamp.now() })
@@ -28,7 +44,6 @@ export const runRecipeAgent = onCall({
 
     const recipe = await generateAgentRecipeCore({ pantry, preferences: prefs })
 
-    // 簡易評価
     const exclude = new Set((prefs.exclude||[]).map(s=>s.trim()))
     const usesExcluded = (recipe.ingredients||[]).some((ing:any)=>exclude.has((ing.name||'').trim()))
     const tooLong = prefs.maxTimeMin ? (recipe.totalTimeMin||0) > prefs.maxTimeMin : false
@@ -36,7 +51,6 @@ export const runRecipeAgent = onCall({
 
     if (!usesExcluded && !tooLong && !tooManyMissing) { best = recipe; break }
 
-    // 軽い自動調整（例）
     if (tooLong) prefs.maxTimeMin = Math.floor((prefs.maxTimeMin||30) * 1.2)
   }
 
