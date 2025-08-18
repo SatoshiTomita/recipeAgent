@@ -101,16 +101,16 @@ const deleteIngredient = async (index: number) => {
   fetchedItems.value.splice(index, 1);
   await updateIngredients(userId, fetchedItems.value as Ingredient[]);
 };
-const runResult = ref<{recipeId:string; recipe:any} | null>(null)
+const runResult = ref<{ recipeId: string; recipe: any } | null>(null)
+
 const handleRunRecipeAgent = async () => {
   isLoading.value = true
   try {
-    // ✅ ログイン必須（未ログインなら関数側で unauthenticated）
-    const res = await run()
-    runResult.value = res
-    // res.recipeId が Firestore に保存されたドキュメントID
-    // res.recipe が採用レシピJSON
-  } catch (e:any) {
+    const res = await run()               // { recipeId, recipe }
+    runResult.value = res                 // ← ここに格納
+    // 任意：すぐ使えるようにも文字列化しておく
+    recipeAgentText.value = JSON.stringify(res.recipe, null, 2)
+  } catch (e: any) {
     console.error('runRecipeAgent 失敗:', e)
     alert(e?.message || 'エージェントの実行に失敗しました')
   } finally {
@@ -196,7 +196,7 @@ onMounted(() => {
         <button @click="handleRunRecipeAgent"
           class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-10 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105"
           :disabled="isLoading">
-          {{ isLoading ? '生成中...' : '🤖 パントリーから生成（嗜好反映）' }}
+          {{ isLoading ? '生成中...' : '🤖 パントリーから生成' }}
         </button>
       </div>
 
@@ -204,8 +204,32 @@ onMounted(() => {
       <div v-if="recipe" class="bg-white border p-6 rounded-xl shadow-md whitespace-pre-wrap text-gray-800">
         {{ recipe }}
       </div>
-      <div v-if="recipeAgentText" class="bg-white border p-6 rounded-xl shadow-md mt-4">
-        <pre class="whitespace-pre-wrap text-gray-800 text-sm">{{ recipeAgentText }}</pre>
+      <div v-if="runResult" class="bg-white border p-6 rounded-xl shadow-md mt-4">
+        <div class="text-sm text-gray-600 mb-2">
+          保存ID: {{ runResult.recipeId }}
+        </div>
+
+        <h3 class="font-semibold text-lg mb-2">🍽 {{ runResult.recipe.title }}</h3>
+
+        <div class="text-sm text-gray-700 mb-3">
+          <span>人数: {{ runResult.recipe.servings }}</span> /
+          <span>時間: {{ runResult.recipe.totalTimeMin }}分</span> /
+          <span>難易度: {{ runResult.recipe.difficulty }}</span>
+        </div>
+
+        <h4 class="font-semibold">材料</h4>
+        <ul class="list-disc pl-5 mb-4">
+          <li v-for="(ing, i) in runResult.recipe.ingredients" :key="i">
+            {{ ing.name }}：{{ ing.quantity }}{{ ing.unit || '' }}
+          </li>
+        </ul>
+
+        <h4 class="font-semibold">作り方</h4>
+        <ol class="list-decimal pl-5">
+          <li v-for="(s, i) in runResult.recipe.steps" :key="i">
+            {{ s.text }} <span v-if="s.tips" class="text-xs text-gray-500">（Tip: {{ s.tips }}）</span>
+          </li>
+        </ol>
       </div>
     </div>
   </div>
