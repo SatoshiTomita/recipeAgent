@@ -2,6 +2,14 @@
 import type { Timestamp } from 'firebase/firestore';
 import type { Ingredient } from '@/@types/ingredients';
 export type UserPlan = 'standard' | 'premium';
+export type UserPrefs = {
+  cuisine?: string
+  servings?: number
+  maxTimeMin?: number
+  budgetYen?: number
+  exclude?: string[]
+  tools?: string[]
+}
 export interface UserInfo {
   /** ユーザーの一意なID（Firebase UIDなど） */
   uid: string;
@@ -35,6 +43,8 @@ export interface UserInfo {
 
   /** プラン種別 */
   plan: UserPlan;
+
+  preferences?: UserPrefs;
 
   /** アプリ内ポイント（必要な場合） */
   points: number;
