@@ -9,9 +9,9 @@ const client = new DocumentProcessorServiceClient();
 
 export const analyzeReceipt = async (imageBytes: Buffer) => {
   const processorPath = client.processorPath(
-    PROJECT_ID.value(),
-    DOCUMENTAI_LOCATION.value(),
-    DOCUMENTAI_PROCESSOR_ID.value()
+    PROJECT_ID.value,
+    DOCUMENTAI_LOCATION.value,
+    DOCUMENTAI_PROCESSOR_ID.value
   );
 
   const request = {

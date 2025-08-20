@@ -12,6 +12,7 @@ const { generateRecipe } = useGenerateRecipe();
 const { getRecipeItems, addIngredient, updateIngredients } = useUserRecipes();
 const { generate, run } = useRecipeAgent()
 const { getPrefs, upsertPrefs } = useUserPreferences();
+const { sendPushMessage, sendBroadcastMessage } = useLineMessaging();
 const auth = getAuth();
 const fetchedItems = ref<Ingredient[]>([]);
 // 選択された料理スタイル（国）
@@ -76,7 +77,16 @@ const handleAddIngredient = async () => {
     console.error("食材の追加に失敗しました:", e);
   }
 };
+const testPush = async () => {
+  const myUserId = "Uc74738b6f58a62a18f4773828d53346a"; // LINE Developers → Messaging API チャンネル → Basic settings で確認
+  const res = await sendPushMessage(myUserId, "NuxtからLINE Pushテスト ✅");
+  console.log(res);
+};
 
+const testBroadcast = async () => {
+  const res = await sendBroadcastMessage("NuxtからBroadcastテスト 👋");
+  console.log(res);
+};
 const handleGenerateRecipe = async () => {
   isLoading.value = true;
   try {
@@ -226,6 +236,10 @@ onMounted(() => {
           <span>🌍 国を選択する</span>
         </button>
       </div>
+      <div>
+    <button @click="testPush">Pushテスト</button>
+    <button @click="testBroadcast">Broadcastテスト</button>
+  </div>
 
       <!-- 食材一覧 -->
       <div>

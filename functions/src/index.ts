@@ -1,6 +1,6 @@
 import admin from "firebase-admin";
 import { setGlobalOptions } from "firebase-functions/v2";
-import serviceAccount from "../config/serviceAccontKey.json";
+import serviceAccount from "../config/serviceAccountKey.json";
 // import { initializeSentry } from "./util/sentry";
 
 // initializeSentry();
@@ -27,7 +27,8 @@ const funcs: FunctionsObj = {
   api_openai_generateRecipe: "./openai/generateRecipe",
   api_openai_recipes_core:"./openai/recipes/core",
   api_openai_recipes_generaeteAgentRecipes:"./openai/recipes/generateAgentRecipe",
-  api_openai_recipes_runRecipeAgent:"./openai/recipes/runRecipeAgent"
+  api_openai_recipes_runRecipeAgent:"./openai/recipes/runRecipeAgent",
+  api_messaging_linePush:"./messaging/linePush"
 };
 
 const loadFunctions = (functionsObj: FunctionsObj) => {
