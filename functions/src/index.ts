@@ -28,7 +28,9 @@ const funcs: FunctionsObj = {
   api_openai_recipes_core:"./openai/recipes/core",
   api_openai_recipes_generaeteAgentRecipes:"./openai/recipes/generateAgentRecipe",
   api_openai_recipes_runRecipeAgent:"./openai/recipes/runRecipeAgent",
-  api_messaging_linePush:"./messaging/linePush"
+  api_messaging_linePush:"./messaging/linePush",
+  api_cloudTasks_notify:"./cloudTasks/notify",
+  api_cloudTasks_schedule:"./cloudTasks/schedule",
 };
 
 const loadFunctions = (functionsObj: FunctionsObj) => {
