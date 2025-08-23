@@ -5,7 +5,7 @@ import { useScheduleRecipeNotify } from '~/composables/useScheduleRecipeNotify'
 import { getAuth } from 'firebase/auth'
 
 // ★ ハードコードしたJSTのISO文字列（必ず現在より未来にする）
-const WHEN_FIXED = '2025-08-22T22:00:00+09:00' // ←必要に応じて書き換え
+const WHEN_FIXED = '2025-08-24T22:00:00+09:00' // ←必要に応じて書き換え
 
 const { schedule } = useScheduleRecipeNotify()
 const result = ref('')
