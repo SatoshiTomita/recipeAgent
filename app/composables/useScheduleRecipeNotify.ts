@@ -1,38 +1,79 @@
 // composables/useScheduleRecipeNotify.ts
-import { httpsCallable } from 'firebase/functions'
+import { getFirestore, collection, addDoc, Timestamp, serverTimestamp } from 'firebase/firestore'
 
-type SchedulePayload = {
+type CreateScheduleInput = {
   userId: string
-  scheduledAt: string | number
+  when: Date | string | number
+  lineUserId: string
+}
+type CreateScheduleResult = { scheduleId: string }
+
+type CreateDailyRuleInput = {
+  userId: string
+  lineUserId: string
+  times: string[]     // 'HH:mm'
+  tz?: string         // default: 'Asia/Tokyo'
+}
+type CreateDailyRuleResult = { ruleId: string }
+
+// ---- helpers ----
+function toTimestamp(when: Date | string | number): Timestamp {
+  if (when instanceof Date) return Timestamp.fromDate(when)
+  if (typeof when === 'number') {
+    const ms = when > 10_000_000_000 ? when : when * 1000
+    return Timestamp.fromMillis(ms)
+  }
+  const ms = Date.parse(when)
+  if (!Number.isFinite(ms)) throw new Error('scheduledAt is invalid string')
+  return Timestamp.fromMillis(ms)
+}
+function normTime(t: string): string | null {
+  const m = t.trim().match(/^(\d{1,2}):(\d{2})$/)
+  if (!m) return null
+  const h = Math.max(0, Math.min(23, parseInt(m[1], 10)))
+  const mm = Math.max(0, Math.min(59, parseInt(m[2], 10)))
+  return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
 }
 
-type ScheduleResult = { ok: boolean; taskName: string }
-
 export const useScheduleRecipeNotify = () => {
-  const functions = useFunctions()
-  const callable = httpsCallable<SchedulePayload, ScheduleResult>(
-    functions,
-    'api_cloudTasks_schedule-scheduleRecipeNotify'
-  )
+  const db = getFirestore()
 
-  async function schedule(userId: string, when: Date | string | number) {
-    let scheduledAt: string | number
-
-    if (when instanceof Date) {
-      // サーバ側で Date.parse するなら ISO(UTC) が安全
-      // ※ toIsoJst(when) を使う場合はサーバでそのまま Date.parse 可能
-      scheduledAt = when.toISOString()
-    } else if (typeof when === 'number') {
-      // epoch(ms) をそのまま
-      scheduledAt = when
-    } else {
-      // string(例: '2025-08-24T22:00:00+09:00') をそのまま
-      scheduledAt = when
-    }
-
-    const { data } = await callable({ userId, scheduledAt })
-    return data
+  // 単発予約：ルールで許可されているキーだけをセット
+  async function createSchedule(
+    { userId, when, lineUserId }: CreateScheduleInput
+  ): Promise<CreateScheduleResult> {
+    const col = collection(db, `users/${userId}/schedules`)
+    const scheduledAt = toTimestamp(when)
+    const now = serverTimestamp()
+    const docRef = await addDoc(col, {
+      scheduledAt,
+      lineUserId,
+      createdAt: now,   // ★ 追加
+      updatedAt: now,   // ★ 追加
+    })
+    return { scheduleId: docRef.id }
   }
 
-  return { schedule }
+  // 毎日ルール：こちらも createdAt / updatedAt を必ず入れる
+  async function createDailyRule(
+    { userId, lineUserId, times, tz = 'Asia/Tokyo' }: CreateDailyRuleInput
+  ): Promise<CreateDailyRuleResult> {
+    const cleaned = Array.from(new Set(times.map(normTime).filter(Boolean) as string[]))
+    if (cleaned.length === 0) throw new Error('時刻を1つ以上入れてください（HH:mm）')
+    if (cleaned.length > 8) cleaned.splice(8)
+
+    const now = serverTimestamp()
+    const ref = await addDoc(collection(db, `users/${userId}/scheduleRules`), {
+      type: 'DAILY',
+      times: cleaned,
+      tz,
+      lineUserId,
+      enabled: true,
+      createdAt: now,   // ★ 追加
+      updatedAt: now,   // ★ 追加
+    })
+    return { ruleId: ref.id }
+  }
+
+  return { createSchedule, createDailyRule }
 }

@@ -31,6 +31,8 @@ const funcs: FunctionsObj = {
   api_messaging_linePush:"./messaging/linePush",
   api_cloudTasks_notify:"./cloudTasks/notify",
   api_cloudTasks_schedule:"./cloudTasks/schedule",
+  api_cloudTasks_onCreate:"./cloudTasks/onCreate",
+  api_cloudTasks_onRuleCreated:"./cloudTasks/onRuleCreated"
 };
 
 const loadFunctions = (functionsObj: FunctionsObj) => {
