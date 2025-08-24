@@ -47,7 +47,9 @@ export const useScheduleRecipeNotify = () => {
     const now = serverTimestamp()
     const docRef = await addDoc(col, {
       scheduledAt,
+      scheduledAtTs: scheduledAt,
       lineUserId,
+      status: 'PENDING', 
       createdAt: now,   // ★ 追加
       updatedAt: now,   // ★ 追加
     })

@@ -54,9 +54,12 @@ async function ensureNextOccurrence(userId: string, ruleId: string) {
   const times: string[] = Array.isArray(rule.times) ? rule.times : []
   if (times.length === 0) return
 
-  const nextIsoJst = nextDailyIsoJst(times)
+  const nextIsoJst = nextDailyIsoJst(times)     // "YYYY-MM-DDTHH:mm:00+09:00"
+  const when = new Date(nextIsoJst)             // ← これを Timestamp として保存
+  
   const schedRef = await db.collection(`users/${userId}/schedules`).add({
-    scheduledAt: nextIsoJst,   // onCreate が ISO(+09:00) をそのまま解釈
+    scheduledAt: nextIsoJst,        // 文字列（見やすさ用）
+    scheduledAtTs: when,            // ← Timestamp（Admin SDKはDateをTimestampで保存）
     lineUserId: rule.lineUserId,
     status: 'PENDING',
     ruleId,
