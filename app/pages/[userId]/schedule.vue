@@ -26,12 +26,7 @@ const ensureUser = () => new Promise<User | null>((resolve) => {
 const pad = (n: number) => String(n).padStart(2, '0')
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
 const hm  = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
-
-// 単発 or 毎日
-const mode = ref<'oneoff' | 'daily'>('oneoff')
-
 /* ========= 単発 ========= */
-const tzLabel = '(JST +09:00)'
 const today = new Date()
 const dateStr = ref(ymd(today))
 const timeStr = ref(hm(today))
@@ -49,25 +44,20 @@ watch([dateStr, timeStr], () => {
   if (combined.getTime() <= Date.now()) { errorOneoff.value = '現在以降の日時を指定してください'; return }
 })
 
-const previewIsoJst = computed(() => {
-  if (errorOneoff.value) return '—'
-  const d = new Date(`${dateStr.value}T${timeStr.value}`)
-  if (!Number.isFinite(d.getTime())) return '—'
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}+09:00`
-})
+
 
 /* ========= 毎日 ========= */
 const dailyStartDate = ref(ymd(today))   // 初回単発生成に使用
 const tz = ref('Asia/Tokyo')
 const errorDaily = ref<string | null>(null)
 
-const selectedTimes = ref<Set<string>>(new Set(['07:30']))
+const selectedTimes = ref<Set<string>>(new Set())
 const maxDaily = 8
 const canAddMore = computed(() => selectedTimes.value.size < maxDaily)
 const timesSorted = computed(() => Array.from(selectedTimes.value).sort((a,b)=>a.localeCompare(b)))
 
 // time入力（Enterでも追加）
-const dailyTimeInput = ref('07:30')
+const dailyTimeInput = ref('')
 function addDailyTime() {
   errorDaily.value = null
   const m = dailyTimeInput.value?.match(/^(\d{1,2}):(\d{2})$/)
@@ -112,12 +102,7 @@ async function onSubmit() {
     const user = await ensureUser()
     if (!user) throw new Error('ログインが必要です')
 
-    if (mode.value === 'oneoff') {
-      if (errorOneoff.value) throw new Error(errorOneoff.value)
-      const when = new Date(`${dateStr.value}T${timeStr.value}`)
-      const { scheduleId } = await createSchedule({ userId: user.uid, when, lineUserId: lineUserId.value })
-      result.value = `単発予約を作成: ${scheduleId}`
-    } else {
+   
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dailyStartDate.value)) throw new Error('開始日が不正です')
       if (!selectedTimes.value.size) throw new Error('時刻を1つ以上追加してください')
       if (selectedTimes.value.size > maxDaily) throw new Error(`1日あたり最大 ${maxDaily} 件までです`)
@@ -133,7 +118,7 @@ async function onSubmit() {
       const firstWhen = nextOccurrenceFrom(dailyStartDate.value, cleaned)
       const { scheduleId } = await createSchedule({ userId: user.uid, when: firstWhen, lineUserId: lineUserId.value })
       result.value = `毎日ルールを作成: ${ruleId}\n初回分の予約を作成: ${scheduleId}`
-    }
+    
   } catch (e: any) {
     result.value = `エラー: ${e?.message ?? e}`
   } finally {
@@ -149,54 +134,15 @@ async function onSubmit() {
       <h2 class="text-xl font-semibold tracking-tight">レシピ通知の予約</h2>
       <p class="text-sm text-gray-500">単発または毎日を選び、日時を設定してください。</p>
     </div>
-
-    <!-- Mode segmented -->
-    <div class="inline-flex rounded-xl bg-gray-100 p-1 mb-4 shadow-inner">
-      <button
-        class="px-4 py-2 rounded-lg text-sm transition
-               " :class="mode==='oneoff' ? 'bg-white shadow text-black' : 'text-gray-600 hover:text-black'"
-        @click="mode='oneoff'">単発</button>
-      <button
-        class="px-4 py-2 rounded-lg text-sm transition
-               " :class="mode==='daily' ? 'bg-white shadow text-black' : 'text-gray-600 hover:text-black'"
-        @click="mode='daily'">毎日</button>
-    </div>
-
     <!-- Card -->
     <div class="rounded-2xl border bg-white/70 backdrop-blur p-5 shadow-sm space-y-6">
-      <!-- ONE-OFF -->
-      <div v-if="mode==='oneoff'" class="space-y-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">日付 <span class="text-gray-400">{{ tzLabel }}</span></label>
-            <input type="date" v-model="dateStr" :min="ymd(new Date())" :max="maxDate"
-                   class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black/70" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">時刻</label>
-            <input type="time" v-model="timeStr" step="60"
-                   class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black/70" />
-          </div>
-        </div>
-        <p v-if="errorOneoff" class="text-red-600 text-sm">{{ errorOneoff }}</p>
-        <div class="text-xs text-gray-500">
-          送信予定: <code class="font-mono">{{ previewIsoJst }}</code>
-        </div>
-      </div>
-
       <!-- DAILY -->
-      <div v-else class="space-y-5">
+      <div  class="space-y-5">
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div class="sm:col-span-1">
             <label class="block text-xs font-medium text-gray-600 mb-1">開始日 (JST)</label>
             <input type="date" v-model="dailyStartDate" :min="ymd(new Date())" :max="maxDate"
                    class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black/70" />
-          </div>
-          <div class="sm:col-span-1">
-            <label class="block text-xs font-medium text-gray-600 mb-1">タイムゾーン</label>
-            <select v-model="tz" class="w-full rounded-xl border px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-black/70">
-              <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
-            </select>
           </div>
           <div class="sm:col-span-1 flex items-end">
             <div class="text-xs text-gray-500">選択中

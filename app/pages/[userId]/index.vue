@@ -8,15 +8,12 @@ definePageMeta({
 });
 const router = useRouter();
 const userId = useRoute().params.userId as string;
-const { generateRecipe } = useGenerateRecipe();
 const { getRecipeItems, addIngredient, updateIngredients } = useUserRecipes();
-const { generate, run } = useRecipeAgent()
+const { run } = useRecipeAgent()
 const { getPrefs, upsertPrefs } = useUserPreferences();
-const { sendPushMessage, sendBroadcastMessage } = useLineMessaging();
 const auth = getAuth();
 const fetchedItems = ref<Ingredient[]>([]);
 // 選択された料理スタイル（国）
-const cuisine = ref("日本");
 const recipe = ref("");
 const recipeAgentText = ref("");
 const isLoading = ref(false);
@@ -31,29 +28,23 @@ const goToOcr = () => {
   }
 };
 
-const goToCountrySelector = () => {
-  if (userId) {
-    router.push(`/${userId}/countries`);
-  } else {
+// const goToCountrySelector = () => {
+//   if (userId) {
+//     router.push(`/${userId}/countries`);
+//   } else {
+//     console.error("userId が取得できていません");
+//   }
+// };
+
+const goToScheduleSelector=()=>{
+  if (userId){
+    router.push(`/${userId}/schedule`);
+  }else{
     console.error("userId が取得できていません");
   }
-};
+}
 
 // レシピ生成に使う食材
-const items = ref([
-  { name: "大根", price: 100, quantity: 1 },
-  { name: "ひき肉", price: 200, quantity: 1 },
-  { name: "にんじん", price: 80, quantity: 2 },
-  { name: "玉ねぎ", price: 90, quantity: 1 },
-  { name: "じゃがいも", price: 120, quantity: 3 },
-  { name: "ピーマン", price: 60, quantity: 2 },
-  { name: "キャベツ", price: 130, quantity: 1 },
-  { name: "トマト", price: 150, quantity: 2 },
-  { name: "豆腐", price: 90, quantity: 1 },
-  { name: "卵", price: 60, quantity: 4 },
-  { name: "小松菜", price: 110, quantity: 1 },
-  { name: "しめじ", price: 100, quantity: 1 },
-]);
 
 
 const handleAddIngredient = async () => {
@@ -75,27 +66,6 @@ const handleAddIngredient = async () => {
     newIngredient.value = { name: "", quantity: 1 };
   } catch (e) {
     console.error("食材の追加に失敗しました:", e);
-  }
-};
-const testPush = async () => {
-  const myUserId = "Uc74738b6f58a62a18f4773828d53346a"; // LINE Developers → Messaging API チャンネル → Basic settings で確認
-  const res = await sendPushMessage(myUserId, "NuxtからLINE Pushテスト ✅");
-  console.log(res);
-};
-
-const testBroadcast = async () => {
-  const res = await sendBroadcastMessage("NuxtからBroadcastテスト 👋");
-  console.log(res);
-};
-const handleGenerateRecipe = async () => {
-  isLoading.value = true;
-  try {
-    recipe.value = await generateRecipe(items.value, cuisine.value);
-  } catch (error) {
-    console.error("レシピ生成に失敗しました:", error);
-    recipe.value = "レシピの生成に失敗しました。";
-  } finally {
-    isLoading.value = false;
   }
 };
 
@@ -169,8 +139,6 @@ onMounted(() => {
     }
   });
 });
-
-
 </script>
 
 <template>
@@ -231,14 +199,16 @@ onMounted(() => {
           class="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-transform transform hover:scale-105">
           <span>📷 OCRページへ</span>
         </button>
-        <button @click="goToCountrySelector"
+        <!-- <button @click="goToCountrySelector"
           class="flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-transform transform hover:scale-105">
           <span>🌍 国を選択する</span>
+        </button> -->
+        <button @click="goToScheduleSelector"
+          class="flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-transform transform hover:scale-105">
+          <span>🕑 スケジュールページへ</span>
         </button>
       </div>
       <div>
-    <button @click="testPush">Pushテスト</button>
-    <button @click="testBroadcast">Broadcastテスト</button>
   </div>
 
       <!-- 食材一覧 -->
@@ -278,16 +248,11 @@ onMounted(() => {
 
       <!-- レシピ生成ボタン -->
       <div class="text-center">
-        <button @click="handleGenerateRecipe"
-          class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-10 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105"
-          :disabled="isLoading">
-          {{ isLoading ? '生成中...' : '🍽 レシピを生成する' }}
-        </button>
         <div class="h-3"></div>
         <button @click="handleRunRecipeAgent"
           class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-10 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105"
           :disabled="isLoading">
-          {{ isLoading ? '生成中...' : '🤖 パントリーから生成' }}
+          {{ isLoading ? '生成中...' : 'レシピを生成する' }}
         </button>
       </div>
 
