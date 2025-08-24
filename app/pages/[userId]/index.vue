@@ -2,15 +2,15 @@
 import { onAuthStateChanged, getAuth } from "firebase/auth";
 import { ref, onMounted } from "vue";
 import type { Ingredient } from "~/@types/ingredients";
-import type { UserPrefs } from "@/@types/userInfo";
+
 definePageMeta({
   middleware: "auth-client",
+  layout:'with-sidebar',
+  title: 'ホーム',
 });
-const router = useRouter();
 const userId = useRoute().params.userId as string;
 const { getRecipeItems, addIngredient, updateIngredients } = useUserRecipes();
 const { run } = useRecipeAgent()
-const { getPrefs, upsertPrefs } = useUserPreferences();
 const auth = getAuth();
 const fetchedItems = ref<Ingredient[]>([]);
 // 選択された料理スタイル（国）
@@ -18,34 +18,6 @@ const recipe = ref("");
 const recipeAgentText = ref("");
 const isLoading = ref(false);
 const newIngredient = ref<Ingredient>({ name: "", quantity: 1 });
-const excludeInput = ref("");
-const toolsInput = ref("");
-const goToOcr = () => {
-  if (userId) {
-    router.push(`/${userId}/ocr`);
-  } else {
-    console.error("userId が取得できていません");
-  }
-};
-
-// const goToCountrySelector = () => {
-//   if (userId) {
-//     router.push(`/${userId}/countries`);
-//   } else {
-//     console.error("userId が取得できていません");
-//   }
-// };
-
-const goToScheduleSelector=()=>{
-  if (userId){
-    router.push(`/${userId}/schedule`);
-  }else{
-    console.error("userId が取得できていません");
-  }
-}
-
-// レシピ生成に使う食材
-
 
 const handleAddIngredient = async () => {
   if (!newIngredient.value.name || newIngredient.value.quantity < 1) {
@@ -69,30 +41,10 @@ const handleAddIngredient = async () => {
   }
 };
 
-const prefs = ref<UserPrefs>({
-  servings: 2,
-  maxTimeMin: 30,
-  budgetYen: 800,
-  exclude: [],
-  tools: [],
-});
 
-const normalizePrefsFromInputs = () => {
-  prefs.value.exclude = excludeInput.value
-    .split(",")
-    .map(s => s.trim())
-    .filter(Boolean);
-  prefs.value.tools = toolsInput.value
-    .split(",")
-    .map(s => s.trim())
-    .filter(Boolean);
-};
 
-const savePrefs = async () => {
-  normalizePrefsFromInputs();
-  await upsertPrefs(userId, prefs.value);
-  alert("好み（preferences）を保存しました");
-};
+
+
 const updateQuantity = async (index: number, quantity: number) => {
   if (quantity < 1) return;
   const item = fetchedItems.value[index];
@@ -112,9 +64,8 @@ const runResult = ref<{ recipeId: string; recipe: any } | null>(null)
 const handleRunRecipeAgent = async () => {
   isLoading.value = true
   try {
-    const res = await run()               // { recipeId, recipe }
-    runResult.value = res                 // ← ここに格納
-    // 任意：すぐ使えるようにも文字列化しておく
+    const res = await run()              
+    runResult.value = res               
     recipeAgentText.value = JSON.stringify(res.recipe, null, 2)
   } catch (e: any) {
     console.error('runRecipeAgent 失敗:', e)
@@ -126,14 +77,9 @@ const handleRunRecipeAgent = async () => {
 
 onMounted(() => {
   onAuthStateChanged(auth, async (user) => {
-    console.log("Auth state changed:", user);
     if (user) {
       const result = await getRecipeItems(userId);
-      const p = await getPrefs(userId);
       fetchedItems.value = result;
-      prefs.value = { ...prefs.value, ...p };
-      excludeInput.value = (prefs.value.exclude ?? []).join(", ");
-      toolsInput.value = (prefs.value.tools ?? []).join(", ");
     } else {
       console.warn("ログインしていません");
     }
@@ -144,76 +90,13 @@ onMounted(() => {
 <template>
   <div class="min-h-screen bg-gradient-to-br from-white to-gray-100 py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-4xl mx-auto space-y-10">
-      <h1 class="text-4xl font-extrabold text-center text-gray-800">🍳 レシピAIアシスタント</h1>
-      <!-- ★ 好み（preferences） -->
-      <div class="bg-white rounded-xl shadow p-6">
-        <h2 class="text-xl font-bold text-gray-700 mb-4">✨ 好み・条件（preferences）</h2>
-
-        <div class="grid sm:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm text-gray-600 mb-1">料理スタイル（例: 日本, イタリア）</label>
-            <input v-model="prefs.cuisine" type="text" class="w-full border rounded-lg px-3 py-2" placeholder="日本" />
-          </div>
-
-          <div>
-            <label class="block text-sm text-gray-600 mb-1">人数（servings）</label>
-            <input v-model.number="prefs.servings" type="number" min="1" class="w-full border rounded-lg px-3 py-2" />
-          </div>
-
-          <div>
-            <label class="block text-sm text-gray-600 mb-1">最大時間（分）</label>
-            <input v-model.number="prefs.maxTimeMin" type="number" min="1" class="w-full border rounded-lg px-3 py-2" />
-          </div>
-
-          <div>
-            <label class="block text-sm text-gray-600 mb-1">予算（円）</label>
-            <input v-model.number="prefs.budgetYen" type="number" min="0" class="w-full border rounded-lg px-3 py-2" />
-          </div>
-
-          <div class="sm:col-span-2">
-            <label class="block text-sm text-gray-600 mb-1">除外食材（カンマ区切り）</label>
-            <input v-model="excludeInput" type="text" class="w-full border rounded-lg px-3 py-2"
-              placeholder="乳, えび, そば" />
-          </div>
-
-          <div class="sm:col-span-2">
-            <label class="block text-sm text-gray-600 mb-1">使える器具（カンマ区切り）</label>
-            <input v-model="toolsInput" type="text" class="w-full border rounded-lg px-3 py-2"
-              placeholder="電子レンジ, オーブン, フライパン" />
-          </div>
-
-
-        </div>
-
-        <div class="mt-4">
-          <button @click="savePrefs"
-            class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2 rounded-lg">
-            保存
-          </button>
-        </div>
-      </div>
-
-      <!-- ボタン群 -->
-      <div class="flex flex-col sm:flex-row justify-center gap-4">
-        <button @click="goToOcr"
-          class="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-transform transform hover:scale-105">
-          <span>📷 OCRページへ</span>
-        </button>
-        <!-- <button @click="goToCountrySelector"
-          class="flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-transform transform hover:scale-105">
-          <span>🌍 国を選択する</span>
-        </button> -->
-        <button @click="goToScheduleSelector"
-          class="flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-transform transform hover:scale-105">
-          <span>🕑 スケジュールページへ</span>
-        </button>
-      </div>
+      <h1 class="text-4xl font-extrabold text-center text-gray-800">レシピAIアシスタント</h1>
       <div>
   </div>
 
       <!-- 食材一覧 -->
       <div>
-        <h2 class="text-2xl font-semibold text-gray-700 mb-4">🛒 食材一覧</h2>
+        <h2 class="text-2xl font-semibold text-gray-700 mb-4">登録食材一覧</h2>
         <ul v-if="fetchedItems.length" class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-gray-800">
           <li v-for="(item, index) in fetchedItems" :key="index"
             class="bg-white border rounded-lg shadow-sm px-4 py-2 text-center space-y-2">
@@ -232,7 +115,7 @@ onMounted(() => {
       </div>
       <!-- 食材追加フォーム -->
       <div class="bg-white rounded-xl shadow p-6">
-        <h2 class="text-xl font-bold text-gray-700 mb-4">➕ 食材を追加</h2>
+        <h2 class="text-xl font-bold text-gray-700 mb-4"> 食材を追加</h2>
         <div class="flex flex-col sm:flex-row gap-4">
           <input v-model="newIngredient.name" type="text" placeholder="食材名（例: にんじん）"
             class="flex-1 border border-gray-300 rounded-lg px-4 py-2" />

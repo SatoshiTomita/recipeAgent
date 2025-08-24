@@ -3,7 +3,7 @@ import { ref, onMounted } from "vue";
 import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
 import { Timestamp } from "firebase/firestore";
 import type { StrictIngredient, Ingredient } from "~/@types/ingredients";
-definePageMeta({ middleware: "auth-client" });
+definePageMeta({ middleware: "auth-client",layout:"with-sidebar",title: 'OCR',});
 const userStore = useUserInfoStore();
 const waitForAuthReady = (): Promise<User | null> => {
   return new Promise((resolve) => {

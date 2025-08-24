@@ -3,22 +3,43 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth'
 import { useScheduleRecipeNotify } from '~/composables/useScheduleRecipeNotify'
-import { getFirestore, collection, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, serverTimestamp, deleteDoc, getDoc, arrayRemove } from 'firebase/firestore'
+import { getFirestore, collection, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, serverTimestamp, deleteDoc, getDoc, arrayRemove, setDoc } from 'firebase/firestore'
+definePageMeta({ middleware: "auth-client", layout: "with-sidebar", title: 'スケジュール', });
 const { createSchedule, createDailyRule } = useScheduleRecipeNotify()
 const loading = ref(false)
 const result = ref('')
 
 // 固定の LINE ユーザーID
-const lineUserId = ref('Uc74738b6f58a62a18f4773828d53346a')
+const lineUserId = ref('')
+const lineIdError = computed(() => !lineUserId.value ? 'LINEユーザーIDを入力してください' : '')
 
+async function saveLineUserId() {
+  const user = await ensureUser()
+  if (!user) { result.value = 'ログインが必要です'; return }
+  const db = getFirestore()
+  await setDoc(
+    doc(db, `users/${user.uid}`),
+    { lineUserId: lineUserId.value, updatedAt: serverTimestamp() },
+    { merge: true }
+  )
+  result.value = 'LINEユーザーIDを保存しました'
+}
 // ---- Auth ----
 const authReady = ref(false)
 const currentUser = ref<User | null>(null)
 onMounted(() => {
-  const unsub = onAuthStateChanged(getAuth(), (u) => {
+  const unsub = onAuthStateChanged(getAuth(), async (u) => {
     currentUser.value = u
     authReady.value = true
-    if (u) watchUpcoming(u.uid)        // ★ これが必要
+    if (u) {
+      // 追加：保存済みの lineUserId をロード
+      const db = getFirestore()
+      const userRef = doc(db, `users/${u.uid}`)
+      const userSnap = await getDoc(userRef)
+      lineUserId.value = (userSnap.data()?.lineUserId as string) ?? ''
+
+      watchUpcoming(u.uid)
+    }
     unsub()
   })
 })
@@ -88,7 +109,7 @@ function toHHmm(ts: Timestamp, tz: string = 'Asia/Tokyo') {
 function toYmd(ts: Timestamp, tz: string = 'Asia/Tokyo') {
   return new Intl.DateTimeFormat('ja-JP', {
     year: 'numeric', month: '2-digit', day: '2-digit', timeZone: tz
-  }).format(ts.toDate()).replace(/\//g,'-')
+  }).format(ts.toDate()).replace(/\//g, '-')
 }
 
 // 初回分の最短1件（開始日＋選択時刻）
@@ -200,7 +221,7 @@ async function onSubmit() {
   try {
     const user = await ensureUser()
     if (!user) throw new Error('ログインが必要です')
-
+    if (!lineUserId.value) throw new Error('LINEユーザーIDを入力してください')
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dailyStartDate.value)) throw new Error('開始日が不正です')
     if (!selectedTimes.value.size) throw new Error('時刻を1つ以上追加してください')
@@ -231,7 +252,7 @@ async function onSubmit() {
     <!-- Header -->
     <div class="mb-6">
       <h2 class="text-xl font-semibold tracking-tight">レシピ通知の予約</h2>
-      <p class="text-sm text-gray-500">単発または毎日を選び、日時を設定してください。</p>
+      <p class="text-sm text-gray-500">LINEを送信される日時を設定してください。</p>
     </div>
     <!-- Card -->
     <div class="rounded-2xl border bg-white/70 backdrop-blur p-5 shadow-sm space-y-6">
@@ -266,6 +287,20 @@ async function onSubmit() {
           </div>
           <p v-if="errorDaily" class="text-red-600 text-sm mt-2">{{ errorDaily }}</p>
         </div>
+        <div class="  backdrop-blur mb-6">
+          <label class="block text-xs font-medium text-gray-600 mb-1">LINE ユーザーID</label>
+          <div class="flex gap-2">
+            <input v-model.trim="lineUserId" type="text"
+              class="flex-1 rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black/70"
+              placeholder="例) Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+            <button class="rounded-xl px-4 py-2 text-white bg-black hover:bg-black/90 transition disabled:opacity-60"
+              :disabled="!authReady || !lineUserId" @click="saveLineUserId">
+              保存
+            </button>
+          </div>
+          <p v-if="lineIdError" class="text-red-600 text-sm mt-2">{{ lineIdError }}</p>
+          <p v-else class="text-xs text-gray-500 mt-2">※ LINE Official Account Manager などで取得した userId を入力してください。</p>
+        </div>
 
         <!-- chips -->
         <div>
@@ -279,11 +314,11 @@ async function onSubmit() {
           </transition-group>
         </div>
       </div>
-      <div class="border-t pt-4">
+      <div class="pt-4">
         <h3 class="text-sm font-medium text-gray-700 mb-2">送信予定</h3>
 
         <div v-if="!upcomingUnique.length" class="text-sm text-gray-500">
-          未来の送信予定はありません。
+          スケジュールは設定されていません
         </div>
 
         <ul v-else class="space-y-2">
@@ -291,7 +326,7 @@ async function onSubmit() {
             class="flex items-center justify-between rounded-xl border bg-white px-3 py-2">
             <div class="text-sm">
               <div class="font-mono text-base">{{ (item as any).hhmm }}</div>
-       <div class="text-xs text-gray-500">次回: {{ (item as any).nextYmd }}</div>
+              <div class="text-xs text-gray-500">次回: {{ (item as any).nextYmd }}</div>
               <div v-if="item.ruleId" class="text-xs text-gray-500">rule: {{ item.ruleId }}</div>
             </div>
             <div class="flex items-center gap-2">
