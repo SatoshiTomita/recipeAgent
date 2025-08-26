@@ -27,7 +27,17 @@ async function saveLineUserId() {
 // ---- Auth ----
 const authReady = ref(false)
 const currentUser = ref<User | null>(null)
-onMounted(() => {
+onMounted(async () => {
+  const me = await $fetch<{ lineUserId: string }>('/api/line/me')
+  if (me.lineUserId) {
+    const auth = getAuth()
+    onAuthStateChanged(auth, async (u) => {
+      if (!u) return
+      const db = getFirestore()
+      await updateDoc(doc(db, `users/${u.uid}`), { lineUserId: me.lineUserId })
+      // UI 上も反映させたいならローカル状態にもセット
+    })
+  }
   const unsub = onAuthStateChanged(getAuth(), async (u) => {
     currentUser.value = u
     authReady.value = true
@@ -189,6 +199,23 @@ function watchUpcoming(userId: string) {
   })
   return stopUpcoming
 }
+const { $liffInit } = useNuxtApp()
+const liffId = useRuntimeConfig().public.liffId as string
+
+const goLineLogin = async () => {
+  try {
+    if (!liffId) throw new Error('LIFF ID が設定されていません')
+    const userId=useRoute().params.userId as string;
+    const profile = await $liffInit(liffId, userId)
+    if (!profile) return
+    lineUserId.value = profile.userId
+    await saveLineUserId()
+    result.value = 'LINE アカウントを連携しました'
+  } catch (e: any) {
+    console.error(e)
+    result.value = `LINE 連携に失敗しました: ${e?.message ?? e}`
+  }
+}
 onUnmounted(() => { if (stopUpcoming) stopUpcoming() })
 async function cancelScheduleForItem(item: ScheduleItem & { hhmm?: string }) {
   if (!currentUser.value) return
@@ -301,6 +328,11 @@ async function onSubmit() {
           <p v-if="lineIdError" class="text-red-600 text-sm mt-2">{{ lineIdError }}</p>
           <p v-else class="text-xs text-gray-500 mt-2">※ LINE Official Account Manager などで取得した userId を入力してください。</p>
         </div>
+        <button class="rounded-lg px-3 py-2 bg-[#06C755] text-white"
+          @click="goLineLogin">
+          LINE と連携
+        </button>
+
 
         <!-- chips -->
         <div>

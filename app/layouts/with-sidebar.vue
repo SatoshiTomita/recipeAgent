@@ -139,7 +139,7 @@ async function handleLogout() {
       <!-- Top bar title -->
       <header class="border-b bg-white/70 backdrop-blur">
         <div class="px-6 py-4">
-          <h1 class="text-lg font-semibold tracking-tight">
+          <h1 class="text-2xl font-semibold tracking-tight">
             {{ (route.meta.title as string) || 'ページ' }}
           </h1>
         </div>
