@@ -5,11 +5,16 @@ import { getAuth, onAuthStateChanged, type User } from 'firebase/auth'
 import { useScheduleRecipeNotify } from '~/composables/useScheduleRecipeNotify'
 import { getFirestore, collection, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, serverTimestamp, deleteDoc, getDoc, arrayRemove, setDoc } from 'firebase/firestore'
 definePageMeta({ middleware: "auth-client", layout: "with-sidebar", title: 'スケジュール', });
+type ScheduleItem = {
+  id: string
+  scheduledAtTs: Timestamp
+  scheduledAt?: string
+  ruleId?: string
+  tz?: string
+}
 const { createSchedule, createDailyRule } = useScheduleRecipeNotify()
 const loading = ref(false)
 const result = ref('')
-
-// 固定の LINE ユーザーID
 const lineUserId = ref('')
 const lineIdError = computed(() => !lineUserId.value ? 'LINEユーザーIDを入力してください' : '')
 
@@ -27,32 +32,7 @@ async function saveLineUserId() {
 // ---- Auth ----
 const authReady = ref(false)
 const currentUser = ref<User | null>(null)
-onMounted(async () => {
-  const me = await $fetch<{ lineUserId: string }>('/api/line/me')
-  if (me.lineUserId) {
-    const auth = getAuth()
-    onAuthStateChanged(auth, async (u) => {
-      if (!u) return
-      const db = getFirestore()
-      await updateDoc(doc(db, `users/${u.uid}`), { lineUserId: me.lineUserId })
-      // UI 上も反映させたいならローカル状態にもセット
-    })
-  }
-  const unsub = onAuthStateChanged(getAuth(), async (u) => {
-    currentUser.value = u
-    authReady.value = true
-    if (u) {
-      // 追加：保存済みの lineUserId をロード
-      const db = getFirestore()
-      const userRef = doc(db, `users/${u.uid}`)
-      const userSnap = await getDoc(userRef)
-      lineUserId.value = (userSnap.data()?.lineUserId as string) ?? ''
 
-      watchUpcoming(u.uid)
-    }
-    unsub()
-  })
-})
 const ensureUser = () => new Promise<User | null>((resolve) => {
   if (currentUser.value) return resolve(currentUser.value)
   const unsub = onAuthStateChanged(getAuth(), (u) => { unsub(); resolve(u) })
@@ -157,13 +137,7 @@ const upcomingUnique = computed(() => {
   return Array.from(map.values()).sort((a, b) => a.hhmm.localeCompare(b.hhmm))
 })
 
-type ScheduleItem = {
-  id: string
-  scheduledAtTs: Timestamp
-  scheduledAt?: string
-  ruleId?: string
-  tz?: string
-}
+
 
 const upcoming = ref<ScheduleItem[]>([])
 let stopUpcoming: null | (() => void) = null
@@ -199,19 +173,30 @@ function watchUpcoming(userId: string) {
   })
   return stopUpcoming
 }
-const { $liffInit } = useNuxtApp()
-const liffId = useRuntimeConfig().public.liffId as string
+const route = useRoute()
+const router = useRouter()
 
 const goLineLogin = async () => {
   try {
-    if (!liffId) throw new Error('LIFF ID が設定されていません')
-    const userId=useRoute().params.userId as string;
-    const profile = await $liffInit(liffId, userId)
-    if (!profile) return
-    lineUserId.value = profile.userId
-    await saveLineUserId()
-    result.value = 'LINE アカウントを連携しました'
-  } catch (e: any) {
+    const userId = route.params.userId as string
+    if (!userId) throw new Error('URL に userId がありません')
+
+    // Firestore 等から LIFF ID を取得（既存関数のままでOK）
+    const liffId = await getLiffIdByEventId(userId)
+
+    // 1) 共有するコンテキスト
+    const ctx = { userId, next: '/:uid/schedule', liffId }
+    const ctxStr = JSON.stringify(ctx)
+
+    // 2) sessionStorage に保存（失敗しても無視）
+    try { sessionStorage.setItem('liff_context', ctxStr) } catch {}
+
+    // 3) URL にも base64 で乗せておく（リダイレクト後のフェイルオーバー）
+    const ctxB64 = btoa(encodeURIComponent(ctxStr))
+
+    // 4) 固定エンドポイントへ遷移
+    router.push({ path: '/liffEntry', query: { ctx: ctxB64 } })
+  } catch (e:any) {
     console.error(e)
     result.value = `LINE 連携に失敗しました: ${e?.message ?? e}`
   }
@@ -272,6 +257,32 @@ async function onSubmit() {
     loading.value = false
   }
 }
+onMounted(async () => {
+  const me = await $fetch<{ lineUserId: string }>('/api/line/me')
+  if (me.lineUserId) {
+    const auth = getAuth()
+    onAuthStateChanged(auth, async (u) => {
+      if (!u) return
+      const db = getFirestore()
+      await updateDoc(doc(db, `users/${u.uid}`), { lineUserId: me.lineUserId })
+      // UI 上も反映させたいならローカル状態にもセット
+    })
+  }
+  const unsub = onAuthStateChanged(getAuth(), async (u) => {
+    currentUser.value = u
+    authReady.value = true
+    if (u) {
+      // 追加：保存済みの lineUserId をロード
+      const db = getFirestore()
+      const userRef = doc(db, `users/${u.uid}`)
+      const userSnap = await getDoc(userRef)
+      lineUserId.value = (userSnap.data()?.lineUserId as string) ?? ''
+
+      watchUpcoming(u.uid)
+    }
+    unsub()
+  })
+})
 </script>
 
 <template>

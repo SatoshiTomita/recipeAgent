@@ -1,58 +1,76 @@
-import { liff } from "@line/liff";
-import { LiffMockPlugin } from "@line/liff-mock";
+import type { Liff } from '@line/liff'
+import { getAuth, signInWithCustomToken } from 'firebase/auth'
 
-export default defineNuxtPlugin(() => ({
-  provide: {
-    async liffInit(liffId: string, userId: string) {
-      const pub = useRuntimeConfig().public as any;
+export default defineNuxtPlugin((nuxtApp) => {
+  let liffInstance: Liff | null = null
 
-      const isNgrokHost = () => {
-        if (typeof window === "undefined") return false;
-        const h = window.location.hostname;
-        return (
-          /\.ngrok\.io$/.test(h) ||
-          /\.ngrok\.app$/.test(h) ||
-          /\.ngrok-free\.app$/.test(h)
-        );
-      };
+  const getLiff = async (): Promise<Liff> => {
+    if (!process.client) throw new Error('LIFF is client-only')
+    if (liffInstance) return liffInstance
+    const mod = await import('@line/liff')
+    liffInstance = mod.liff
+    return liffInstance
+  }
 
-      // モックを使うかどうか：明示フラグ優先
-      const useMock = pub.liffUseMock === true ? true : false;
+  // ★ ここで 'liffInit' を提供（呼ぶ側は $liffInit）
+  nuxtApp.provide('liffInit', async (liffId: string, userId: string) => {
+    if (!process.client) return null
 
-      try {
-        if (useMock) {
-          // ← 明示フラグが true のときのみモック
-          liff.use(new LiffMockPlugin());
-          // @ts-ignore
-          await liff.init({ liffId, mock: true });
-          if (!liff.isLoggedIn()) liff.login();
-        } else {
-          // 本物ログイン（ngrok でもこちらに入る）
-          await liff.init({ liffId });
-          if (!liff.isLoggedIn()) {
-            liff.login({ redirectUri: window.location.href });
-            return null; // リダイレクト
-          }
+    const pub = useRuntimeConfig().public as any
+    const useMock = pub.liffUseMock === true
+
+    try {
+      const liff = await getLiff()
+
+      if (useMock) {
+        const { LiffMockPlugin } = await import('@line/liff-mock')
+        liff.use(new LiffMockPlugin())
+        await liff.init({ liffId, mock: true })
+        if (!liff.isLoggedIn()) {
+          liff.login()
+          return { redirecting: true } as const
         }
-
-        const profile = await liff.getProfile();
-        const liffUser: LiffUser = {
-          userId: profile.userId,
-          displayName: profile.displayName,
-          pictureUrl: profile.pictureUrl ?? "",
-        };
-
-        await saveLiffUser(userId, liffUser);
-
-        return {
-          userId: profile.userId,
-          displayName: profile.displayName,
-          pictureUrl: profile.pictureUrl ?? null,
-        };
-      } catch (e) {
-        console.error("LIFF ログインに失敗しました", e);
-        return null;
+      } else {
+        await liff.init({ liffId })
+        if (!liff.isLoggedIn()) {
+          // LIFF の Endpoint URL と同一（クエリなし）
+          const redirectTarget = `${location.origin}/liffEntry`
+          liff.login({ redirectUri: redirectTarget })
+          return { redirecting: true } as const
+        }
       }
-    },
-  },
-}));
+
+      const profile = await liff.getProfile()
+
+      // Firebase サインイン
+      const idToken = liff.getIDToken?.()
+      if (!idToken) throw new Error('LIFF ID token を取得できませんでした')
+
+      const { customToken } = await $fetch<{ customToken: string }>(
+        '/api/auth/line',
+        { method: 'POST', body: { idToken } }
+      )
+      await signInWithCustomToken(getAuth(), customToken)
+
+      // 保存は best-effort
+      try {
+        await saveLiffUser(userId, {
+          userId: profile.userId,
+          displayName: profile.displayName,
+          pictureUrl: profile.pictureUrl ?? '',
+        } as LiffUser)
+      } catch (e) {
+        console.warn('saveLiffUser failed (ignored):', e)
+      }
+
+      return {
+        userId: profile.userId,
+        displayName: profile.displayName,
+        pictureUrl: profile.pictureUrl ?? null,
+      }
+    } catch (e) {
+      console.error('LIFF ログイン処理に失敗', e)
+      return null
+    }
+  })
+})

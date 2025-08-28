@@ -110,14 +110,13 @@ export const saveLiffIdByEventId = async (
 
 // liffIdの取得
 export const getLiffIdByEventId = async (
-    serviceType: string,
     eventId: string,
 ): Promise<string> => {
-    if (!serviceType || !eventId) {
-        throw new Error("serviceType または eventId が不足しています");
+    if ( !eventId) {
+        throw new Error(" eventId が不足しています");
     }
     const db = getFirestore();
-    const liffDocRef = doc(db, serviceType, eventId);
+    const liffDocRef = doc(db, "users",eventId);
     const snap = await getDoc(liffDocRef);
 
     if (!snap.exists()) return "";

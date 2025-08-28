@@ -9,6 +9,9 @@ export default defineNuxtConfig({
     'tailwindcss/colors': resolve(__dirname, 'utils/tw-colors-runtime.ts'),
   },
   runtimeConfig: {
+    firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
+    firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY,
     lineChannelId: process.env.NUXT_LINE_CHANNEL_ID,
     lineChannelSecret: process.env.NUXT_LINE_CHANNEL_SECRET,
     lineRedirectUri: process.env.NUXT_LINE_REDIRECT_URI,
