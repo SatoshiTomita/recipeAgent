@@ -1,10 +1,26 @@
-<!-- components/ScheduleRecipeForm.vue -->
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth'
 import { useScheduleRecipeNotify } from '~/composables/useScheduleRecipeNotify'
-import { getFirestore, collection, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, serverTimestamp, deleteDoc, getDoc, arrayRemove, setDoc } from 'firebase/firestore'
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  Timestamp,
+  doc,
+  updateDoc,
+  serverTimestamp,
+  deleteDoc,
+  getDoc,
+  arrayRemove,
+  setDoc
+} from 'firebase/firestore'
+
 definePageMeta({ middleware: "auth-client", layout: "with-sidebar", title: 'スケジュール', });
+
 type ScheduleItem = {
   id: string
   scheduledAtTs: Timestamp
@@ -12,13 +28,14 @@ type ScheduleItem = {
   ruleId?: string
   tz?: string
 }
+
 const { createSchedule, createDailyRule } = useScheduleRecipeNotify()
 const loading = ref(false)
 const result = ref('')
 const lineUserId = ref('')
 const lineIdError = computed(() => !lineUserId.value ? 'LINEユーザーIDを入力してください' : '')
 
-async function saveLineUserId() {
+const saveLineUserId = async () => {
   const user = await ensureUser()
   if (!user) { result.value = 'ログインが必要です'; return }
   const db = getFirestore()
@@ -29,19 +46,22 @@ async function saveLineUserId() {
   )
   result.value = 'LINEユーザーIDを保存しました'
 }
+
 // ---- Auth ----
 const authReady = ref(false)
 const currentUser = ref<User | null>(null)
 
-const ensureUser = () => new Promise<User | null>((resolve) => {
-  if (currentUser.value) return resolve(currentUser.value)
-  const unsub = onAuthStateChanged(getAuth(), (u) => { unsub(); resolve(u) })
-})
+const ensureUser = () =>
+  new Promise<User | null>((resolve) => {
+    if (currentUser.value) return resolve(currentUser.value)
+    const unsub = onAuthStateChanged(getAuth(), (u) => { unsub(); resolve(u) })
+  })
 
 // 共通
 const pad = (n: number) => String(n).padStart(2, '0')
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const hm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
+
 /* ========= 単発 ========= */
 const today = new Date()
 const dateStr = ref(ymd(today))
@@ -60,10 +80,8 @@ watch([dateStr, timeStr], () => {
   if (combined.getTime() <= Date.now()) { errorOneoff.value = '現在以降の日時を指定してください'; return }
 })
 
-
-
 /* ========= 毎日 ========= */
-const dailyStartDate = ref(ymd(today))   // 初回単発生成に使用
+const dailyStartDate = ref(ymd(today))
 const tz = ref('Asia/Tokyo')
 const errorDaily = ref<string | null>(null)
 
@@ -72,9 +90,9 @@ const maxDaily = 8
 const canAddMore = computed(() => selectedTimes.value.size < maxDaily)
 const timesSorted = computed(() => Array.from(selectedTimes.value).sort((a, b) => a.localeCompare(b)))
 
-// time入力（Enterでも追加）
 const dailyTimeInput = ref('')
-function addDailyTime() {
+
+const addDailyTime = () => {
   errorDaily.value = null
   const m = dailyTimeInput.value?.match(/^(\d{1,2}):(\d{2})$/)
   if (!m) { errorDaily.value = 'HH:mm 形式で入力してください'; return }
@@ -84,26 +102,26 @@ function addDailyTime() {
   if (selectedTimes.value.has(t)) { errorDaily.value = `${t} は追加済みです`; return }
   if (!canAddMore.value) { errorDaily.value = `最大 ${maxDaily} 件までです`; return }
   selectedTimes.value.add(t)
-  selectedTimes.value = new Set(selectedTimes.value) // ★再代入で反応させる
+  selectedTimes.value = new Set(selectedTimes.value)
   dailyTimeInput.value = ''
 }
-function removeTime(t: string) {
+
+const removeTime = (t: string) => {
   selectedTimes.value.delete(t)
   selectedTimes.value = new Set(selectedTimes.value)
 }
-function toHHmm(ts: Timestamp, tz: string = 'Asia/Tokyo') {
-  return new Intl.DateTimeFormat('ja-JP', {
+
+const toHHmm = (ts: Timestamp, tz: string = 'Asia/Tokyo') =>
+  new Intl.DateTimeFormat('ja-JP', {
     hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz
   }).format(ts.toDate())
-}
-function toYmd(ts: Timestamp, tz: string = 'Asia/Tokyo') {
-  return new Intl.DateTimeFormat('ja-JP', {
+
+const toYmd = (ts: Timestamp, tz: string = 'Asia/Tokyo') =>
+  new Intl.DateTimeFormat('ja-JP', {
     year: 'numeric', month: '2-digit', day: '2-digit', timeZone: tz
   }).format(ts.toDate()).replace(/\//g, '-')
-}
 
-// 初回分の最短1件（開始日＋選択時刻）
-function nextOccurrenceFrom(startYmd: string, hhmmList: string[]): Date {
+const nextOccurrenceFrom = (startYmd: string, hhmmList: string[]): Date => {
   const now = new Date()
   const base = new Date(`${startYmd}T00:00`)
   const sorted = hhmmList
@@ -117,31 +135,30 @@ function nextOccurrenceFrom(startYmd: string, hhmmList: string[]): Date {
       if (cand.getTime() > now.getTime()) return cand
     }
   }
-  // fallback: 明日の最初
+
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
   const [h, m] = sorted[0] ?? [9, 0]
   tomorrow.setHours(h, m, 0, 0)
   return tomorrow
 }
+
+const upcoming = ref<ScheduleItem[]>([])
 const upcomingUnique = computed(() => {
   const map = new Map<string, (ScheduleItem & { hhmm: string, nextYmd: string })>()
   for (const it of upcoming.value) {
-    const tz = it.tz ?? 'Asia/Tokyo'
-    const hhmm = toHHmm(it.scheduledAtTs, tz) // ← キー
+    const tzVal = it.tz ?? 'Asia/Tokyo'
+    const hhmm = toHHmm(it.scheduledAtTs, tzVal)
     if (!map.has(hhmm)) {
-      map.set(hhmm, { ...it, hhmm, nextYmd: toYmd(it.scheduledAtTs, tz) })
+      map.set(hhmm, { ...it, hhmm, nextYmd: toYmd(it.scheduledAtTs, tzVal) })
     }
   }
-  // 表示順は時刻順
   return Array.from(map.values()).sort((a, b) => a.hhmm.localeCompare(b.hhmm))
 })
 
-
-
-const upcoming = ref<ScheduleItem[]>([])
 let stopUpcoming: null | (() => void) = null
-function watchUpcoming(userId: string) {
+
+const watchUpcoming = (userId: string) => {
   const db = getFirestore()
   const qRef = query(
     collection(db, `users/${userId}/schedules`),
@@ -173,51 +190,44 @@ function watchUpcoming(userId: string) {
   })
   return stopUpcoming
 }
+
 const route = useRoute()
 const router = useRouter()
 
 const goLineLogin = async () => {
   try {
+    const user = await ensureUser()
     const userId = route.params.userId as string
     if (!userId) throw new Error('URL に userId がありません')
-
-    // Firestore 等から LIFF ID を取得（既存関数のままでOK）
     const liffId = await getLiffIdByEventId(userId)
-
-    // 1) 共有するコンテキスト
-    const ctx = { userId, next: '/:uid/schedule', liffId }
+    const ctx = { userId, next: '/:uid/schedule', liffId, destUid: user.uid }
     const ctxStr = JSON.stringify(ctx)
-
-    // 2) sessionStorage に保存（失敗しても無視）
     try { sessionStorage.setItem('liff_context', ctxStr) } catch {}
-
-    // 3) URL にも base64 で乗せておく（リダイレクト後のフェイルオーバー）
+    try { sessionStorage.setItem('dest_uid', user.uid) } catch {}
     const ctxB64 = btoa(encodeURIComponent(ctxStr))
-
-    // 4) 固定エンドポイントへ遷移
     router.push({ path: '/liffEntry', query: { ctx: ctxB64 } })
-  } catch (e:any) {
+  } catch (e: any) {
     console.error(e)
     result.value = `LINE 連携に失敗しました: ${e?.message ?? e}`
   }
 }
+
 onUnmounted(() => { if (stopUpcoming) stopUpcoming() })
-async function cancelScheduleForItem(item: ScheduleItem & { hhmm?: string }) {
+
+const cancelScheduleForItem = async (item: ScheduleItem & { hhmm?: string }) => {
   if (!currentUser.value) return
   const db = getFirestore()
   const uid = currentUser.value.uid
 
-  // 1) schedules/{id} を削除
   const schedRef = doc(db, `users/${uid}/schedules/${item.id}`)
   const snap = await getDoc(schedRef)
   const data = snap.data() as any || {}
-  const tz = data?.tz || item.tz || 'Asia/Tokyo'
-  const hhmm = item.hhmm ?? toHHmm(item.scheduledAtTs, tz)
+  const tzVal = data?.tz || item.tz || 'Asia/Tokyo'
+  const hhmm = item.hhmm ?? toHHmm(item.scheduledAtTs, tzVal)
   const ruleId = data?.ruleId ?? item.ruleId
 
   await deleteDoc(schedRef)
 
-  // 2) もし daily 由来なら、rules からも HH:mm を抜く
   if (ruleId) {
     const ruleRef = doc(db, `users/${uid}/scheduleRules/${ruleId}`)
     await updateDoc(ruleRef, {
@@ -226,8 +236,8 @@ async function cancelScheduleForItem(item: ScheduleItem & { hhmm?: string }) {
     } as any)
   }
 }
-/* ========= 送信 ========= */
-async function onSubmit() {
+
+const onSubmit = async () => {
   loading.value = true
   result.value = ''
   try {
@@ -248,15 +258,19 @@ async function onSubmit() {
     })
 
     const firstWhen = nextOccurrenceFrom(dailyStartDate.value, cleaned)
-    const { scheduleId } = await createSchedule({ userId: user.uid, when: firstWhen, lineUserId: lineUserId.value })
+    const { scheduleId } = await createSchedule({
+      userId: user.uid,
+      when: firstWhen,
+      lineUserId: lineUserId.value
+    })
     result.value = `毎日ルールを作成: ${ruleId}\n初回分の予約を作成: ${scheduleId}`
-
   } catch (e: any) {
     result.value = `エラー: ${e?.message ?? e}`
   } finally {
     loading.value = false
   }
 }
+
 onMounted(async () => {
   const me = await $fetch<{ lineUserId: string }>('/api/line/me')
   if (me.lineUserId) {
@@ -265,25 +279,23 @@ onMounted(async () => {
       if (!u) return
       const db = getFirestore()
       await updateDoc(doc(db, `users/${u.uid}`), { lineUserId: me.lineUserId })
-      // UI 上も反映させたいならローカル状態にもセット
     })
   }
   const unsub = onAuthStateChanged(getAuth(), async (u) => {
     currentUser.value = u
     authReady.value = true
     if (u) {
-      // 追加：保存済みの lineUserId をロード
       const db = getFirestore()
       const userRef = doc(db, `users/${u.uid}`)
       const userSnap = await getDoc(userRef)
       lineUserId.value = (userSnap.data()?.lineUserId as string) ?? ''
-
       watchUpcoming(u.uid)
     }
     unsub()
   })
 })
 </script>
+
 
 <template>
   <div class="mx-auto max-w-2xl">

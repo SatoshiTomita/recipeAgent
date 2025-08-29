@@ -41,9 +41,8 @@ function getCtxB64FromRoute(): string {
     }
     return ''
 }
-
+const ctx = ref<any>(null)
 const loadLiffContext = () => {
-    // 1) URL から
     let raw = ''
     const ctxB64 = getCtxB64FromRoute()
     if (ctxB64) {
@@ -58,6 +57,7 @@ const loadLiffContext = () => {
 
     try {
         const parsed = JSON.parse(raw)
+        ctx.value = parsed    
         userId.value = parsed.userId ?? ''
         next.value = parsed.next ?? ''
         liffId.value = parsed.liffId ?? ''
@@ -88,57 +88,56 @@ function waitForAuth(): Promise<User> {
     })
 }
 const onLiffLogin = async (isSafeUri: boolean, nextUrl: string) => {
-    try {
-        if (isSafeUri) safeSetSession('next_after_login', nextUrl)
+  try {
+    if (isSafeUri) safeSetSession('next_after_login', nextUrl)
 
-        const { $liffInit } = useNuxtApp()
+    const { $liffInit } = useNuxtApp()
+    const result = await $liffInit(liffId.value, userId.value)
+    if (result && (result as any).redirecting) return
+    if (!result) return
+    liffUser.value = result
 
-        if (typeof $liffInit !== 'function') {
-            console.error('[$liffInit] plugin not loaded')
-            startFallbackFlow()
-            return
-        }
+    // ① ctx.destUid（最優先：飛ぶ前に確定させた Firebase uid）
+    const ctxDestUid = ctx.value?.destUid as string | undefined
 
-        const result = await $liffInit(liffId.value, userId.value)
-        // プラグイン側がリダイレクト時に { redirecting: true } を返す実装の場合
-        if (result && (result as any).redirecting) return
-        if (!result) {
-            // ここで即フォールバックしない（リダイレクト直後の復帰中かもしれないため）
-            return
-        }
+    // ② sessionStorage のバックアップ
+    const preUid = safeGetSession('dest_uid')
 
-        liffUser.value = result
+    // ③ 念のため現在の Firebase ユーザーも取得（LINE で再ログインされてても拾える）
+    const user = await waitForAuth()
+    const currentUid = user.uid
 
-        const user = await waitForAuth()
-        const uid = user.uid
+    // ★優先順：ctx.destUid > session.dest_uid > currentUser.uid
+    const finalUid = ctxDestUid || preUid || currentUid
 
-        const storedNext = safeGetSession('next_after_login')
-        let dest = storedNext.includes('/:uid')
-            ? storedNext.replace('/:uid', `/${uid}`)
-            : `/${uid}${storedNext.startsWith('/') ? storedNext : `/${storedNext}`}`
+    const storedNext = safeGetSession('next_after_login')
+    let dest = storedNext.includes('/:uid')
+      ? storedNext.replace('/:uid', `/${finalUid}`)
+      : `/${finalUid}${storedNext.startsWith('/') ? storedNext : `/${storedNext}`}`
 
-        if (!(dest.startsWith('/') && !dest.startsWith('//'))) dest = '/'
+    if (!(dest.startsWith('/') && !dest.startsWith('//'))) dest = '/'
 
-        // お片付け
-        if (process.client) {
-            try {
-                const cleanQuery = { ...route.query }
-                delete (cleanQuery as any).ctx   // URL も綺麗に
-                router.replace({ path: route.path, query: cleanQuery })
-            } catch { }
-        }
-        try { sessionStorage.removeItem('next_after_login') } catch { }
-        try { sessionStorage.removeItem('liff_context') } catch { }
-        safeSetSession('flashLiffSuccess', 'true')
-
-        router.replace({ path: dest, query: { liff: 'true' } })
-    } catch (error) {
-        try { sessionStorage.removeItem('next_after_login') } catch { }
-        console.error('ログイン処理に失敗', error)
-        startFallbackFlow()
-    } finally {
-        setTimeout(() => { isLoading.value = false }, 300)
+    // 後片付け（ctx/next/dest_uid はここで消す）
+    if (process.client) {
+      try {
+        const cleanQuery = { ...route.query }
+        delete (cleanQuery as any).ctx
+        router.replace({ path: route.path, query: cleanQuery })
+      } catch {}
     }
+    try { sessionStorage.removeItem('next_after_login') } catch {}
+    try { sessionStorage.removeItem('liff_context') } catch {}
+    try { sessionStorage.removeItem('dest_uid') } catch {}
+    safeSetSession('flashLiffSuccess', 'true')
+
+    router.replace({ path: dest, query: { liff: 'true' } })
+  } catch (e) {
+    try { sessionStorage.removeItem('next_after_login') } catch {}
+    console.error('ログイン処理に失敗', e)
+    startFallbackFlow()
+  } finally {
+    setTimeout(() => { isLoading.value = false }, 300)
+  }
 }
 
 onMounted(async () => {

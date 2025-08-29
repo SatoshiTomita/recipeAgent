@@ -28,7 +28,7 @@ export default defineNuxtConfig({
   vite: {
     server: {
       // ngrok ドメインを許可
-      allowedHosts: ['.ngrok-free.app'],
+      allowedHosts: ['.ngrok-free.app','.trycloudflare.com'],
       hmr: {
         host: 'localhost',
       },

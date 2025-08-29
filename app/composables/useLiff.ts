@@ -8,6 +8,7 @@ import {
     setDoc,
     serverTimestamp,
 } from "firebase/firestore";
+import { getAuth } from 'firebase/auth'
 
 // サービス毎のアカウント情報取得
 export const getTargetLiffAccount = async (serviceType: string) => {
@@ -29,28 +30,37 @@ export const getTargetLiffAccount = async (serviceType: string) => {
 };
 
 // liff userの保存
-export const saveLiffUser = async (userId: string, user: LiffUser) => {
-    try {
-      const db = getFirestore();
-      const userRef = doc(db, "users", userId);
-      await setDoc(
-        userRef,
-        {
-          lineUserId: user.userId,           // ★画面が参照するフィールド
-          lineProfile: {                     // 任意：詳細はサブオブジェクトで保持
-            userId: user.userId,
-            displayName: user.displayName,
-            pictureUrl: user.pictureUrl ?? null,
-          },
-          updatedAt: serverTimestamp(),
+export const saveLiffUser = async (opts: { targetUid?: string; user: LiffUser }) => {
+    const db = getFirestore()
+    const authUid = getAuth().currentUser?.uid
+    const targetUid = opts.targetUid ?? authUid
+  
+    // デバッグ：何が渡ってきているか確認
+    console.log('[saveLiffUser] args:', { targetUid, authUid, user: opts.user })
+  
+    if (!targetUid) throw new Error('saveLiffUser: targetUid is empty and no authenticated user')
+    if (!opts.user) throw new Error('saveLiffUser: user payload is empty')
+  
+    // Firestore は undefined を拒否するので null/'' に寄せる
+    const lineUserId = opts.user.userId ?? ''
+    const displayName = opts.user.displayName ?? ''
+    const pictureUrl = opts.user.pictureUrl ?? null
+  
+    const userRef = doc(db, 'users', targetUid)
+    await setDoc(
+      userRef,
+      {
+        lineUserId,
+        lineProfile: {
+          userId: lineUserId,
+          displayName,
+          pictureUrl,
         },
-        { merge: true }
-      );
-    } catch (e) {
-      console.error("liff user 保存エラー", e);
-      throw e;
-    }
-  };
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    )
+  }
 
 // liff userの取得
 export const getLiffUsers = async (
