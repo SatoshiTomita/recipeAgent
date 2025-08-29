@@ -50,6 +50,7 @@ const ensureUserDoc = async (uid: string, user?: User) => {
       createdAt: serverTimestamp(),
       email: user?.email ?? null,
       displayName: user?.displayName ?? null,
+      liffId:"2007981616-ylQBwQj9"
     })
   } else {
     await setDoc(userRef, {
