@@ -1,6 +1,23 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import { resolve } from 'node:path'
 export default defineNuxtConfig({
+  app: {
+    head: {
+      link: [
+        { rel: 'icon', type: 'image/png', href: '/favicon.png' },
+        { rel: 'apple-touch-icon', href: '/favicon.png' } 
+      ],
+      meta: [
+        { name: 'description', content: 'Recipe Agent - AIでレシピを生成するアプリ' },
+        { property: 'og:title', content: 'Recipe Agent' },
+        { property: 'og:description', content: '手持ちの食材でレシピを自動生成します' },
+        { property: 'og:image', content: 'https://firebasestorage.googleapis.com/v0/b/recipeagent-cff98.firebasestorage.app/o/uploads%2FChatGPT%20Image%202025%E5%B9%B48%E6%9C%8830%E6%97%A5%2010_10_42.png?alt=media&token=64f62a6e-1832-4de4-ad2a-e07261731105' },
+        { property: 'og:url', content: 'https://recipe-agent.vercel.app' },
+        { name: 'twitter:card', content: 'summary_large_image' }
+      ],
+      title: 'Recipe Agent',
+    }
+  },
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   modules: ['@nuxt/eslint', '@nuxt/image', '@nuxt/ui', "@nuxtjs/tailwindcss"],
