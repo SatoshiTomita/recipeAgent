@@ -34,6 +34,9 @@ const itemTitle = (label: string) => (collapsed.value ? label : undefined)
 // 幅の切替
 const asideWidth = computed(() => (collapsed.value ? 'w-16' : 'w-56'))
 
+// メイン側の左余白（固定配置のサイドバー幅に合わせる）
+const contentOffset = computed(() => (collapsed.value ? 'ml-16' : 'ml-56'))
+
 // ----- Auth state（ログアウトボタンの有効/無効に使う） -----
 const authReady = ref(false)
 const currentUser = ref<User | null>(null)
@@ -66,10 +69,10 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="min-h-screen flex bg-gray-50">
+  <div class="h-[100dvh] overflow-hidden flex bg-gray-50">
     <!-- Sidebar -->
     <aside
-      class="sticky top-0 h-screen shrink-0 border-r bg-white/80 backdrop-blur px-2 py-4 transition-all"
+      class="fixed top-0 left-0 h-[100dvh] shrink-0 border-r bg-white/80 backdrop-blur px-2 py-4 transition-all z-30"
       :class="[asideWidth]"
     >
       <!-- 内部は縦並び・全高で配置制御 -->
@@ -81,21 +84,23 @@ async function handleLogout() {
         </div>
 
         <!-- Nav -->
-        <nav class="flex flex-col gap-2">
-          <NuxtLink
-            v-for="item in nav"
-            :key="item.to"
-            :to="item.to"
-            class="group rounded-xl px-2 py-2 text-sm transition flex items-center gap-3"
-            :class="isActive(item.to)
-              ? 'bg-black text-white'
-              : 'text-gray-700 hover:bg-gray-100'"
-            :title="itemTitle(item.label)"
-          >
-            <Icon :name="item.icon" class="text-lg shrink-0" />
-            <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
-          </NuxtLink>
-        </nav>
+        <div class="flex-1 overflow-y-auto pr-1">
+          <nav class="flex flex-col gap-2">
+            <NuxtLink
+              v-for="item in nav"
+              :key="item.to"
+              :to="item.to"
+              class="group rounded-xl px-2 py-2 text-sm transition flex items-center gap-3"
+              :class="isActive(item.to)
+                ? 'bg-black text-white'
+                : 'text-gray-700 hover:bg-gray-100'"
+              :title="itemTitle(item.label)"
+            >
+              <Icon :name="item.icon" class="text-lg shrink-0" />
+              <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
+            </NuxtLink>
+          </nav>
+        </div>
 
         <!-- Bottom actions：ログアウト + 折りたたみ（常に下部） -->
         <div class="mt-auto border-t pt-3 px-2 space-y-2">
@@ -135,7 +140,7 @@ async function handleLogout() {
     </aside>
 
     <!-- Main -->
-    <div class="flex-1 flex flex-col">
+    <div class="flex-1 flex flex-col h-[100dvh] overflow-auto" :class="contentOffset">
       <!-- Top bar title -->
       <header class="border-b bg-white/70 backdrop-blur">
         <div class="px-6 py-4">
