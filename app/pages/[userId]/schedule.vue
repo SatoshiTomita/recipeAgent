@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { getAuth, onAuthStateChanged, type User } from 'firebase/auth'
+import { getAuth, onAuthStateChanged } from 'firebase/auth'
 import { useScheduleRecipeNotify } from '~/composables/useScheduleRecipeNotify'
+import { getLiffIdByEventId } from '~/composables/useLiff'
+import { useAuthUser } from '~/composables/useAuthUser'
+import { useDateUtils } from '~/composables/useDateUtils'
+import { useUpcomingSchedules } from '~/composables/useUpcomingSchedules'
 import {
   getFirestore,
-  collection,
-  query,
-  where,
-  orderBy,
   onSnapshot,
   Timestamp,
   doc,
@@ -20,6 +20,9 @@ import {
 } from 'firebase/firestore'
 
 definePageMeta({ middleware: "auth-client", layout: "with-sidebar", title: 'スケジュール', });
+
+const MAX_DAILY = 8
+const DEFAULT_TZ = 'Asia/Tokyo'
 
 type ScheduleItem = {
   id: string
@@ -37,6 +40,7 @@ const lineIdError = computed(() => !lineUserId.value ? 'LINEユーザーIDを入
 const displayName = ref<string>('')
 const pictureUrl = ref<string>('')
 let stopUserDoc: null | (() => void) = null
+let stopUpcoming: null | (() => void) = null
 
 const saveLineUserId = async () => {
   const user = await ensureUser()
@@ -51,19 +55,10 @@ const saveLineUserId = async () => {
 }
 
 // ---- Auth ----
-const authReady = ref(false)
-const currentUser = ref<User | null>(null)
-
-const ensureUser = () =>
-  new Promise<User | null>((resolve) => {
-    if (currentUser.value) return resolve(currentUser.value)
-    const unsub = onAuthStateChanged(getAuth(), (u) => { unsub(); resolve(u) })
-  })
+const { authReady, currentUser, ensureUser } = useAuthUser()
 
 // 共通
-const pad = (n: number) => String(n).padStart(2, '0')
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-const hm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
+const { pad, ymd, hm, toHHmm, nextOccurrenceFrom } = useDateUtils(DEFAULT_TZ)
 
 /* ========= 単発 ========= */
 const today = new Date()
@@ -76,12 +71,11 @@ const errorOneoff = ref<string | null>(null)
 
 /* ========= 毎日 ========= */
 const dailyStartDate = ref(ymd(today))
-const tz = ref('Asia/Tokyo')
+const tz = ref(DEFAULT_TZ)
 const errorDaily = ref<string | null>(null)
 
 const selectedTimes = ref<Set<string>>(new Set())
-const maxDaily = 8
-const canAddMore = computed(() => selectedTimes.value.size < maxDaily)
+const canAddMore = computed(() => selectedTimes.value.size < MAX_DAILY)
 const timesSorted = computed(() => Array.from(selectedTimes.value).sort((a, b) => a.localeCompare(b)))
 
 const dailyTimeInput = ref('')
@@ -90,11 +84,11 @@ const addDailyTime = () => {
   errorDaily.value = null
   const m = dailyTimeInput.value?.match(/^(\d{1,2}):(\d{2})$/)
   if (!m) { errorDaily.value = 'HH:mm 形式で入力してください'; return }
-  const h = Math.max(0, Math.min(23, parseInt(m[1], 10)))
-  const mm = Math.max(0, Math.min(59, parseInt(m[2], 10)))
+  const h = Math.max(0, Math.min(23, parseInt(m[1]!, 10)))
+  const mm = Math.max(0, Math.min(59, parseInt(m[2]!, 10)))
   const t = `${pad(h)}:${pad(mm)}`
   if (selectedTimes.value.has(t)) { errorDaily.value = `${t} は追加済みです`; return }
-  if (!canAddMore.value) { errorDaily.value = `最大 ${maxDaily} 件までです`; return }
+  if (!canAddMore.value) { errorDaily.value = `最大 ${MAX_DAILY} 件までです`; return }
   selectedTimes.value.add(t)
   selectedTimes.value = new Set(selectedTimes.value)
   dailyTimeInput.value = ''
@@ -105,85 +99,7 @@ const removeTime = (t: string) => {
   selectedTimes.value = new Set(selectedTimes.value)
 }
 
-const toHHmm = (ts: Timestamp, tz: string = 'Asia/Tokyo') =>
-  new Intl.DateTimeFormat('ja-JP', {
-    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz
-  }).format(ts.toDate())
-
-const toYmd = (ts: Timestamp, tz: string = 'Asia/Tokyo') =>
-  new Intl.DateTimeFormat('ja-JP', {
-    year: 'numeric', month: '2-digit', day: '2-digit', timeZone: tz
-  }).format(ts.toDate()).replace(/\//g, '-')
-
-const nextOccurrenceFrom = (startYmd: string, hhmmList: string[]): Date => {
-  const now = new Date()
-  const base = new Date(`${startYmd}T00:00`)
-  const sorted = hhmmList
-    .map(t => t.split(':').map(Number) as [number, number])
-    .sort(([h1, m1], [h2, m2]) => h1 - h2 || m1 - m2)
-
-  for (let d = 0; d <= 31; d++) {
-    const day = new Date(base); day.setDate(base.getDate() + d)
-    for (const [h, m] of sorted) {
-      const cand = new Date(day); cand.setHours(h, m, 0, 0)
-      if (cand.getTime() > now.getTime()) return cand
-    }
-  }
-
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const [h, m] = sorted[0] ?? [9, 0]
-  tomorrow.setHours(h, m, 0, 0)
-  return tomorrow
-}
-
-const upcoming = ref<ScheduleItem[]>([])
-const upcomingUnique = computed(() => {
-  const map = new Map<string, (ScheduleItem & { hhmm: string, nextYmd: string })>()
-  for (const it of upcoming.value) {
-    const tzVal = it.tz ?? 'Asia/Tokyo'
-    const hhmm = toHHmm(it.scheduledAtTs, tzVal)
-    if (!map.has(hhmm)) {
-      map.set(hhmm, { ...it, hhmm, nextYmd: toYmd(it.scheduledAtTs, tzVal) })
-    }
-  }
-  return Array.from(map.values()).sort((a, b) => a.hhmm.localeCompare(b.hhmm))
-})
-
-let stopUpcoming: null | (() => void) = null
-
-const watchUpcoming = (userId: string) => {
-  const db = getFirestore()
-  const qRef = query(
-    collection(db, `users/${userId}/schedules`),
-    where('scheduledAtTs', '>=', Timestamp.fromDate(new Date())),
-    orderBy('scheduledAtTs', 'asc'),
-  )
-  stopUpcoming = onSnapshot(qRef, snap => {
-    const rows: ScheduleItem[] = []
-    snap.forEach(d => {
-      const data = d.data() as any
-      let ts: Timestamp | null = null
-      if (data?.scheduledAtTs instanceof Timestamp) ts = data.scheduledAtTs
-      else if (data?.scheduledAt instanceof Timestamp) ts = data.scheduledAt
-      else if (typeof data?.scheduledAt === 'string') {
-        const ms = Date.parse(data.scheduledAt)
-        if (Number.isFinite(ms)) ts = Timestamp.fromDate(new Date(ms))
-      }
-      if (ts) {
-        rows.push({
-          id: d.id,
-          scheduledAtTs: ts,
-          scheduledAt: data.scheduledAt,
-          ruleId: data.ruleId,
-          tz: data.tz
-        })
-      }
-    })
-    upcoming.value = rows
-  })
-  return stopUpcoming
-}
+const {  upcomingUnique, watchUpcoming } = useUpcomingSchedules(DEFAULT_TZ)
 
 const route = useRoute()
 const router = useRouter()
@@ -191,6 +107,7 @@ const router = useRouter()
 const goLineLogin = async () => {
   try {
     const user = await ensureUser()
+    if (!user) throw new Error('ログインが必要です')
     const userId = route.params.userId as string
     if (!userId) throw new Error('URL に userId がありません')
     const liffId = await getLiffIdByEventId(userId)
@@ -215,7 +132,7 @@ const cancelScheduleForItem = async (item: ScheduleItem & { hhmm?: string }) => 
   const schedRef = doc(db, `users/${uid}/schedules/${item.id}`)
   const snap = await getDoc(schedRef)
   const data = snap.data() as any || {}
-  const tzVal = data?.tz || item.tz || 'Asia/Tokyo'
+  const tzVal = data?.tz || item.tz || DEFAULT_TZ
   const hhmm = item.hhmm ?? toHHmm(item.scheduledAtTs, tzVal)
   const ruleId = data?.ruleId ?? item.ruleId
 
@@ -240,7 +157,7 @@ const onSubmit = async () => {
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dailyStartDate.value)) throw new Error('開始日が不正です')
     if (!selectedTimes.value.size) throw new Error('時刻を1つ以上追加してください')
-    if (selectedTimes.value.size > maxDaily) throw new Error(`1日あたり最大 ${maxDaily} 件までです`)
+    if (selectedTimes.value.size > MAX_DAILY) throw new Error(`1日あたり最大 ${MAX_DAILY} 件までです`)
     const cleaned = timesSorted.value
 
     const { ruleId } = await createDailyRule({
@@ -266,14 +183,6 @@ const onSubmit = async () => {
 
 onMounted(async () => {
   const me = await $fetch<{ lineUserId: string }>('/api/line/me')
-  if (me.lineUserId) {
-    const auth = getAuth()
-    onAuthStateChanged(auth, async (u) => {
-      if (!u) return
-      const db = getFirestore()
-      await updateDoc(doc(db, `users/${u.uid}`), { lineUserId: me.lineUserId })
-    })
-  }
   const unsub = onAuthStateChanged(getAuth(), async (u) => {
     currentUser.value = u
     authReady.value = true
@@ -283,21 +192,26 @@ onMounted(async () => {
 
     if (u) {
       const db = getFirestore()
+
+      if (me.lineUserId) {
+        await updateDoc(doc(db, `users/${u.uid}`), { lineUserId: me.lineUserId })
+      }
+
       const userRef = doc(db, `users/${u.uid}`)
       stopUserDoc = onSnapshot(userRef, (snap) => {
         const data = snap.data() as any || {}
         lineUserId.value = data?.lineUserId ?? ''
         displayName.value = data?.lineProfile.displayName ?? data?.lineDisplayName ?? ''
         pictureUrl.value = data?.lineProfile.pictureUrl ?? data?.linePictureUrl ?? ''
-        if (u && !stopUpcoming) {
-          watchUpcoming(u.uid)
-        }
       })
+      if (!stopUpcoming) {
+        stopUpcoming = watchUpcoming(u.uid)
+      }
     }
     unsub()
   })
 })
-onUnmounted(() => { if (stopUpcoming) stopUpcoming() })
+onUnmounted(() => { if (stopUpcoming) stopUpcoming(); })
 watch([dateStr, timeStr], () => {
   errorOneoff.value = null
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr.value)) { errorOneoff.value = '日付の形式が正しくありません'; return }
@@ -331,7 +245,7 @@ watch([dateStr, timeStr], () => {
           <div class="sm:col-span-1 flex items-end">
             <div class="text-xs text-gray-500">選択中
               <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ml-1">
-                {{ selectedTimes.size }}/{{ maxDaily }}
+                {{ selectedTimes.size }}/{{ MAX_DAILY }}
               </span>
             </div>
           </div>
